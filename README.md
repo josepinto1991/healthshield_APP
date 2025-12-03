@@ -102,7 +102,7 @@ _**Prerrequisitos**_
 _**1. Clonar el Proyecto**_
 
 bash
-- git clone https://gitlab.com/KillerPR/healthshield.git
+- git clone https://gitlab.com/KillerPR/healthshield_app.git
 - cd healthshield/mobile
 
 _**2. Instalar Dependencias**_

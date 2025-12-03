@@ -1,24 +1,10 @@
-# FastAPI y dependencias principales
 fastapi==0.104.1
-uvicorn==0.24.0
-python-multipart==0.0.6
-
-# Base de datos
+uvicorn[standard]==0.24.0
+gunicorn==21.2.0
 sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 python-dotenv==1.0.0
-
-# Seguridad
-passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
-pyjwt==2.8.0 
-bcrypt==4.1.2  # AGREGAR ESTA LÍNEA
-
-# Web scraping
-beautifulsoup4==4.12.2
-lxml==4.9.3
-requests==2.31.0
-
-# Utilidades
+bcrypt==4.1.2
 pydantic==2.5.0
-email-validator==2.1.0
+python-multipart==0.0.6
