@@ -3,39 +3,40 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: healthshield-postgres-dev
+    container_name: healthshield-postgres
     environment:
-      POSTGRES_DB: healthshield
-      POSTGRES_USER: healthshield_user
-      POSTGRES_PASSWORD: healthshield_password
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${DB_NAME:-healthshield}
+      POSTGRES_USER: ${DB_USER:-healthshield_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-healthshield_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U healthshield_user"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-healthshield_user}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    # En Railway, el servicio se llamará "postgres" automáticamente
 
   api:
     build: .
-    container_name: healthshield-api-dev
+    container_name: healthshield-api
     environment:
-      - ENVIRONMENT=development
-      - DATABASE_URL=postgresql://healthshield_user:healthshield_password@postgres:5432/healthshield
-      - SECRET_KEY=development_secret_key_123
-      - ADMIN_PASSWORD=admin123
-      - DEBUG=True
-      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+      # Railway inyectará DATABASE_URL automáticamente cuando añadas PostgreSQL
+      # Pero tenemos fallback para desarrollo local
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${DB_USER:-healthshield_user}:${DB_PASSWORD:-healthshield_password}@postgres:5432/${DB_NAME:-healthshield}}
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin123!}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - DEBUG=${DEBUG:-False}
+      - PORT=${PORT:-8000}
     ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
+      - "${PORT:-8000}:${PORT:-8000}"
     depends_on:
       postgres:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
 
 volumes:
   postgres_data:
