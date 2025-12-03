@@ -1,30 +1,27 @@
-# Dockerfile optimizado para Render
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar solo lo necesario
+# Instalar dependencias del sistema para PostgreSQL
 RUN apt-get update && apt-get install -y \
     gcc \
-    g++ \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements primero (caché de Docker)
+# Copiar requirements e instalar
 COPY requirements.txt .
-
-# Instalar dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar aplicación
+# Copiar código
 COPY . .
 
-# Crear usuario no-root para seguridad
-RUN useradd -m -u 1000 renderuser && chown -R renderuser:renderuser /app
-USER renderuser
+# Variables de entorno por defecto
+ENV PYTHONUNBUFFERED=1 \
+    ENVIRONMENT=production \
+    PORT=8000
 
-# Puerto que usa Render
-EXPOSE 10000
+# Exponer puerto
+EXPOSE 8000
 
-# Comando de inicio
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10000", "--log-level", "info"]
+# Comando para Railway (usará gunicorn desde Procfile)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

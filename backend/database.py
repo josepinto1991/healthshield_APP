@@ -1,97 +1,49 @@
 import os
-import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import QueuePool
 from dotenv import load_dotenv
 import bcrypt
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 Base = declarative_base()
 
 def get_database_url():
-    """
-    Obtener URL de PostgreSQL para Render.
-    Render inyecta DATABASE_URL automáticamente cuando conectas la DB.
-    """
-    # 1. Primero, DATABASE_URL de Render (automático cuando conectas DB)
+    """Obtener URL de conexión a PostgreSQL desde Railway"""
+    # Railway automáticamente inyecta DATABASE_URL
     database_url = os.environ.get('DATABASE_URL')
     
-    if database_url:
-        logger.info("✅ Usando DATABASE_URL de Render")
-        # Convertir postgres:// a postgresql:// para SQLAlchemy
-        if database_url.startswith("postgres://"):
-            database_url = database_url.replace("postgres://", "postgresql://", 1)
-        return database_url
+    if not database_url:
+        raise ValueError("❌ DATABASE_URL no está configurada en Railway")
     
-    # 2. Para desarrollo local (usar .env)
-    logger.info("⚠️  No hay DATABASE_URL, usando configuración local")
+    # Railway usa postgresql://, pero aseguramos formato correcto
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
     
-    # Variables individuales para desarrollo
-    db_config = {
-        'user': os.environ.get('DB_USER', 'healthshield_user'),
-        'password': os.environ.get('DB_PASSWORD', 'healthshield_password'),
-        'host': os.environ.get('DB_HOST', 'localhost'),
-        'port': os.environ.get('DB_PORT', '5432'),
-        'name': os.environ.get('DB_NAME', 'healthshield')
-    }
-    
-    local_url = f"postgresql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['name']}"
-    logger.info(f"ℹ️  URL local: {local_url}")
-    
-    return local_url
+    print(f"✅ Usando PostgreSQL desde Railway: {database_url.split('@')[1] if '@' in database_url else database_url}")
+    return database_url
 
-# Crear engine con manejo robusto de errores
-try:
-    database_url = get_database_url()
-    logger.info(f"🔗 Conectando a: {database_url}")
-    
-    # Para depuración: mostrar partes de la URL (sin contraseña)
-    if '@' in database_url:
-        safe_url = database_url.split('@')[1] if '@' in database_url else database_url
-        logger.info(f"📡 Host de DB: {safe_url}")
-    
-    engine = create_engine(
-        database_url,
-        echo=False,  # Cambiar a True para debugging SQL
-        poolclass=QueuePool,
-        pool_size=5,
-        max_overflow=10,
-        pool_recycle=300,
-        pool_pre_ping=True,
-        connect_args={
-            "connect_timeout": 10,
-            "keepalives": 1,
-            "keepalives_idle": 30,
-            "keepalives_interval": 10,
-        }
-    )
-    
-    # Test de conexión
-    with engine.connect() as conn:
-        conn.execute("SELECT 1")
-    logger.info("✅ Conexión a PostgreSQL exitosa")
-    
-except Exception as e:
-    logger.error(f"❌ Error conectando a PostgreSQL: {e}")
-    
-    # Fallback temporal: SQLite en memoria (solo para emergencias)
-    logger.warning("⚠️  Usando SQLite en memoria (modo emergencia)")
-    engine = create_engine(
-        "sqlite:///:memory:",
-        echo=False,
-        connect_args={"check_same_thread": False}
-    )
+# Crear engine optimizado para PostgreSQL
+engine = create_engine(
+    get_database_url(),
+    echo=os.environ.get('ENVIRONMENT') == 'development',  # Solo logs en desarrollo
+    pool_pre_ping=True,     # Verificar conexión antes de usar
+    pool_recycle=300,       # Reciclar conexiones cada 5 minutos
+    pool_size=10,           # Tamaño máximo del pool
+    max_overflow=20,        # Conexiones adicionales permitidas
+    connect_args={
+        "connect_timeout": 10,  # Timeout de conexión de 10 segundos
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    }
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
-    """Dependency para obtener sesión de DB"""
+    """Dependencia para obtener sesión de base de datos"""
     db = SessionLocal()
     try:
         yield db
@@ -119,25 +71,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 def init_db():
-    """Inicializar tablas en la base de datos"""
+    """Inicializar tablas en PostgreSQL"""
+    from models import Usuario, Paciente, Vacuna
     try:
-        from models import Usuario, Paciente, Vacuna
-        logger.info("🔄 Creando tablas en PostgreSQL...")
-        
         Base.metadata.create_all(bind=engine)
-        
-        logger.info("✅ Tablas creadas exitosamente")
-        
-        # Verificar que las tablas existen
-        with engine.connect() as conn:
-            tables = conn.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public'
-            """).fetchall()
-            
-            logger.info(f"📊 Tablas en la base de datos: {[t[0] for t in tables]}")
-            
+        print("✅ Tablas de PostgreSQL creadas/verificadas")
     except Exception as e:
-        logger.error(f"❌ Error inicializando base de datos: {e}")
+        print(f"❌ Error inicializando base de datos: {e}")
         raise
