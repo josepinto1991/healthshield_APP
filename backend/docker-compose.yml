@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:13
+    container_name: healthshield-postgres
+    environment:
+      POSTGRES_DB: healthshield
+      POSTGRES_USER: healthshield_user
+      POSTGRES_PASSWORD: healthshield_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5000:5432"    # BD: 5000 (host) → 5432 (contenedor)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      healthshield-network:
+        ipv4_address: 10.10.10.10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthshield_user -d healthshield"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  fastapi-app:
+    build: .
+    container_name: healthshield-api
+    env_file:
+      - .env  # Cargar variables desde .env
+    ports:
+      - "5001:5001"    # API: 5001 (host) → 5001 (contenedor)
+    volumes:
+      - .:/app
+    networks:
+      healthshield-network:
+        ipv4_address: 10.10.10.20
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  healthshield-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.10.0/24
+          gateway: 10.10.10.1

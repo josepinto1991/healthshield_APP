@@ -1,0 +1,36 @@
+1. agregar vista para sincronizacion vidireccional de db SQLite(flutter)(crear carpeta en lib/cache-SQL) con db postgreSQL(base de dato manejada con api en backend).
+sin scripts de coneccion en el front(Flutter) y colocasion de db SQLite en front para mantener datos de manera ofline
+
+2. cambiar icono de aplicacion y despliegue de APK funcional
+
+3. mejorar readme.md 
+
+4. mejorar tablas/modelos en ambas bd para que sean identicas, agregar tabla de "user_data"(para registro), vacuna(registro de vacunas ligado a un id_paciente en la tabla pacientes), pacientes( ligada a IP_vacunas en la tabla vascunas)
+
+5. integrar registro con sistema google
+
+6. agregar vista para cambio de contraseña
+
+7. encriptar claves de usuarios profesionales registrados
+
+8. agregar una verificacion de que el usuario registrado realmente sea un usuario de salud profecional certificado
+
+9. mejorar dockerfile y docker-compose.yml para manejo de ipś fijas para postgreSQL y FastAPI 
+
+10. mejorar rutas de la api(Backend)  y el manejo de las rutas en el front(flutter)
+
+11. acceso sin coneccion a internet usando "user_data" como data para el login local y cuando tengo coneccion a la red internet usar la bd postgres con la api desde el backend
+
+12. boton "¿no tienes cuenta? registrate" que redirija a screens/register_screen.dart
+
+13. botones de logout que tengan funcionalidad de cerrar session
+
+14. informacion general que manden a los link oficiales
+
+15. en la vista realizar registro agregar el campo numero telefonico tambien en la respectiva db sqlite y postgres
+
+16. que se pueda cambiar de realizar registro y visualizar registro (no esta funcionando)
+
+17. se debe poder modificar registros esten sincronizados o no para dosis futuras
+
+bd postgres esta fallando al crearse con dockercompose
