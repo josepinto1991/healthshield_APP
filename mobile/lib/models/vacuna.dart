@@ -1,29 +1,31 @@
 class Vacuna {
   int? id;
   int? serverId;
-  int pacienteId;
-  String nombreVacuna;
-  String fechaAplicacion;
+  String nombrePaciente;
+  String tipoPaciente;
+  String cedulaPaciente;
+  String tipoVacuna;
+  String fechaVacunacion;
   String? lote;
   String? proximaDosis;
   int? usuarioId;
   bool isSynced;
-  String? syncError;
-  DateTime createdAt;
+  DateTime? createdAt;
   DateTime? updatedAt;
 
   Vacuna({
     this.id,
     this.serverId,
-    required this.pacienteId,
-    required this.nombreVacuna,
-    required this.fechaAplicacion,
+    required this.nombrePaciente,
+    required this.tipoPaciente,
+    required this.cedulaPaciente,
+    required this.tipoVacuna,
+    required this.fechaVacunacion,
     this.lote,
     this.proximaDosis,
     this.usuarioId,
     this.isSynced = false,
-    this.syncError,
-    required this.createdAt,
+    this.createdAt,
     this.updatedAt,
   });
 
@@ -31,15 +33,16 @@ class Vacuna {
     return Vacuna(
       id: json['id'],
       serverId: json['server_id'],
-      pacienteId: json['paciente_id'],
-      nombreVacuna: json['nombre_vacuna'],
-      fechaAplicacion: json['fecha_aplicacion'],
+      nombrePaciente: json['nombre_paciente'],
+      tipoPaciente: json['tipo_paciente'],
+      cedulaPaciente: json['cedula_paciente'] ?? '',
+      tipoVacuna: json['tipo_vacuna'],
+      fechaVacunacion: json['fecha_vacunacion'],
       lote: json['lote'],
       proximaDosis: json['proxima_dosis'],
       usuarioId: json['usuario_id'],
       isSynced: json['is_synced'] == 1,
-      syncError: json['sync_error'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
     );
   }
@@ -48,42 +51,38 @@ class Vacuna {
     return {
       'id': id,
       'server_id': serverId,
-      'paciente_id': pacienteId,
-      'nombre_vacuna': nombreVacuna,
-      'fecha_aplicacion': fechaAplicacion,
+      'nombre_paciente': nombrePaciente,
+      'tipo_paciente': tipoPaciente,
+      'cedula_paciente': cedulaPaciente,
+      'tipo_vacuna': tipoVacuna,
+      'fecha_vacunacion': fechaVacunacion,
       'lote': lote,
       'proxima_dosis': proximaDosis,
       'usuario_id': usuarioId,
       'is_synced': isSynced ? 1 : 0,
-      'sync_error': syncError,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
   Map<String, dynamic> toServerJson() {
     return {
-      'paciente_id': pacienteId,
-      'nombre_vacuna': nombreVacuna,
-      'fecha_aplicacion': fechaAplicacion,
+      'nombre_paciente': nombrePaciente,
+      'tipo_paciente': tipoPaciente,
+      'cedula_paciente': cedulaPaciente,
+      'tipo_vacuna': tipoVacuna,
+      'fecha_vacunacion': fechaVacunacion,
       'lote': lote,
       'proxima_dosis': proximaDosis,
-      'usuario_id': usuarioId,
       'local_id': id,
     };
   }
 
   String get fechaFormateada {
-    try {
-      final date = DateTime.parse(fechaAplicacion);
-      return '${date.day}/${date.month}/${date.year}';
-    } catch (e) {
-      return fechaAplicacion;
+    final parts = fechaVacunacion.split('-');
+    if (parts.length == 3) {
+      return '${parts[2]}/${parts[1]}/${parts[0]}';
     }
-  }
-
-  @override
-  String toString() {
-    return 'Vacuna{id: $id, nombreVacuna: $nombreVacuna, pacienteId: $pacienteId, isSynced: $isSynced}';
+    return fechaVacunacion;
   }
 }
