@@ -167,4 +167,4 @@ class SyncResponse(BaseModel):
     message: str
     updates_count: Optional[int] = None
     last_sync: Optional[str] = None
-    updates: Optional[List[dict]] = None
+    updates: Optional[List[dict]] = None 
