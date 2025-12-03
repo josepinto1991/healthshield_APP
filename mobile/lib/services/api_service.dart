@@ -1,10 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../models/usuario.dart';
-import '../models/vacuna.dart';
 
 class ApiService {
-  // static const String baseUrl = 'http://192.168.1.100:5001/api';
   static const String baseUrl = 'https://healthshield-backend.onrender.com/api';
 
   final Map<String, String> headers = {
@@ -23,64 +20,6 @@ class ApiService {
     }
   }
 
-  // ========== VERIFICACIÓN DE PROFESIONALES ==========
-  Future<Map<String, dynamic>> verifyProfessional(String cedula) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/verify/professional'),
-        headers: headers,
-        body: json.encode({'cedula': cedula}),
-      ).timeout(Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        return {
-          'success': false,
-          'is_valid': false,
-          'message': 'Error en verificación: ${response.statusCode}',
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'is_valid': false,
-        'message': 'Error de conexión: $e',
-      };
-    }
-  }
-
-  Future<Map<String, dynamic>> registerProfessional(Usuario usuario, String cedula) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/register-professional?cedula_verificacion=$cedula'),
-        headers: headers,
-        body: json.encode(usuario.toServerJson()),
-      ).timeout(Duration(seconds: 30));
-
-      if (response.statusCode == 201) {
-        final data = json.decode(response.body);
-        if (data['token'] != null) {
-          token = data['token'];
-        }
-        return {
-          'success': true,
-          'data': data,
-        };
-      } else {
-        return {
-          'success': false,
-          'error': 'Error en registro profesional: ${response.body}',
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error de conexión: $e',
-      };
-    }
-  }
-
   // ========== VERIFICAR CONEXIÓN ==========
   Future<bool> checkServerStatus() async {
     try {
@@ -96,7 +35,7 @@ class ApiService {
     }
   }
 
-  // ========== USUARIOS ==========
+  // ========== AUTENTICACIÓN ==========
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
       final response = await http.post(
@@ -131,12 +70,12 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> register(Usuario usuario) async {
+  Future<Map<String, dynamic>> register(Map<String, dynamic> userData) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
         headers: headers,
-        body: json.encode(usuario.toServerJson()),
+        body: json.encode(userData),
       ).timeout(Duration(seconds: 15));
 
       if (response.statusCode == 201) {
@@ -162,20 +101,12 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> changePassword({
-    required String currentPassword,
-    required String newPassword,
-    required int userId,
-  }) async {
+  // ========== PACIENTES ==========
+  Future<Map<String, dynamic>> getPacientes() async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/users/change-password'),
+      final response = await http.get(
+        Uri.parse('$baseUrl/pacientes'),
         headers: headers,
-        body: json.encode({
-          'current_password': currentPassword,
-          'new_password': newPassword,
-          'user_id': userId,
-        }),
       ).timeout(Duration(seconds: 15));
 
       if (response.statusCode == 200) {
@@ -186,7 +117,7 @@ class ApiService {
       } else {
         return {
           'success': false,
-          'error': 'Error cambiando contraseña: ${response.statusCode}',
+          'error': 'Error obteniendo pacientes: ${response.statusCode}',
         };
       }
     } catch (e) {
@@ -197,12 +128,12 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> syncUser(Usuario usuario) async {
+  Future<Map<String, dynamic>> addPaciente(Map<String, dynamic> paciente) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/auth/register'),
+        Uri.parse('$baseUrl/pacientes'),
         headers: headers,
-        body: json.encode(usuario.toServerJson()),
+        body: json.encode(paciente),
       ).timeout(Duration(seconds: 15));
 
       if (response.statusCode == 201) {
@@ -213,7 +144,7 @@ class ApiService {
       } else {
         return {
           'success': false,
-          'error': 'Error sincronizando usuario: ${response.statusCode}',
+          'error': 'Error agregando paciente: ${response.statusCode}',
         };
       }
     } catch (e) {
@@ -225,34 +156,7 @@ class ApiService {
   }
 
   // ========== VACUNAS ==========
-  Future<Map<String, dynamic>> syncVacuna(Vacuna vacuna) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/vacunas'),
-        headers: headers,
-        body: json.encode(vacuna.toServerJson()),
-      ).timeout(Duration(seconds: 15));
-
-      if (response.statusCode == 201) {
-        return {
-          'success': true,
-          'data': json.decode(response.body),
-        };
-      } else {
-        return {
-          'success': false,
-          'error': 'Error sincronizando vacuna: ${response.statusCode}',
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error de conexión: $e',
-      };
-    }
-  }
-
-  Future<Map<String, dynamic>> getVacunasFromServer() async {
+  Future<Map<String, dynamic>> getVacunas() async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/vacunas'),
@@ -278,18 +182,15 @@ class ApiService {
     }
   }
 
-  // ========== SINCRONIZACIÓN MASIVA ==========
-  Future<Map<String, dynamic>> bulkSync(List<Vacuna> vacunas) async {
+  Future<Map<String, dynamic>> addVacuna(Map<String, dynamic> vacuna) async {
     try {
-      final vacunasData = vacunas.map((v) => v.toServerJson()).toList();
-      
       final response = await http.post(
-        Uri.parse('$baseUrl/sync/bulk'),
+        Uri.parse('$baseUrl/vacunas'),
         headers: headers,
-        body: json.encode({'vacunas': vacunasData}),
-      ).timeout(Duration(seconds: 30));
+        body: json.encode(vacuna),
+      ).timeout(Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 201) {
         return {
           'success': true,
           'data': json.decode(response.body),
@@ -297,7 +198,7 @@ class ApiService {
       } else {
         return {
           'success': false,
-          'error': 'Error en sincronización masiva: ${response.statusCode}',
+          'error': 'Error agregando vacuna: ${response.statusCode}',
         };
       }
     } catch (e) {
@@ -308,7 +209,94 @@ class ApiService {
     }
   }
 
-  // ========== OBTENER ACTUALIZACIONES ==========
+  // ========== SINCRONIZACIÓN ==========
+  Future<Map<String, dynamic>> syncPacientes(List<Map<String, dynamic>> pacientes) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/sync/pacientes'),
+        headers: headers,
+        body: json.encode({'pacientes': pacientes}),
+      ).timeout(Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error sincronizando pacientes: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> syncVacunas(List<Map<String, dynamic>> vacunas) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/sync/vacunas'),
+        headers: headers,
+        body: json.encode({'vacunas': vacunas}),
+      ).timeout(Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error sincronizando vacunas: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> fullSync({
+    required List<Map<String, dynamic>> pacientes,
+    required List<Map<String, dynamic>> vacunas,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/sync/full'),
+        headers: headers,
+        body: json.encode({
+          'pacientes': pacientes,
+          'vacunas': vacunas,
+        }),
+      ).timeout(Duration(seconds: 45));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error en sincronización completa: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
   Future<Map<String, dynamic>> getUpdates(String lastSync) async {
     try {
       final response = await http.get(

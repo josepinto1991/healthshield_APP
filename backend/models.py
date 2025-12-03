@@ -35,6 +35,7 @@ class Paciente(Base):
     direccion = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_sync = Column(DateTime(timezone=True))
     
     vacunas = relationship("Vacuna", back_populates="paciente")
 
@@ -50,6 +51,7 @@ class Vacuna(Base):
     usuario_id = Column(Integer, ForeignKey('usuarios.id'))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_sync = Column(DateTime(timezone=True))
     
     paciente = relationship("Paciente", back_populates="vacunas")
     usuario = relationship("Usuario", back_populates="vacunas")
@@ -168,3 +170,13 @@ class SyncResponse(BaseModel):
     updates_count: Optional[int] = None
     last_sync: Optional[str] = None
     updates: Optional[List[dict]] = None
+
+class SyncPacientesRequest(BaseModel):
+    pacientes: List[PacienteCreate]
+
+class SyncVacunasRequest(BaseModel):
+    vacunas: List[VacunaCreate]
+
+class SyncFullRequest(BaseModel):
+    pacientes: List[PacienteCreate] = []
+    vacunas: List[VacunaCreate] = []

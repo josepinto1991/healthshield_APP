@@ -19,7 +19,7 @@ class VacunaService {
   }
 
   Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), _databaseName); // ← CORREGIDO
+    String path = join(await getDatabasesPath(), _databaseName);
     return await openDatabase(
       path,
       version: _databaseVersion,
@@ -32,15 +32,14 @@ class VacunaService {
       CREATE TABLE vacunas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         server_id INTEGER,
-        nombre_paciente TEXT NOT NULL,
-        tipo_paciente TEXT NOT NULL,
-        cedula_paciente TEXT,
-        tipo_vacuna TEXT NOT NULL,
-        fecha_vacunacion TEXT NOT NULL,
+        paciente_id INTEGER NOT NULL,
+        nombre_vacuna TEXT NOT NULL,
+        fecha_aplicacion TEXT NOT NULL,
         lote TEXT,
         proxima_dosis TEXT,
         usuario_id INTEGER,
         is_synced INTEGER DEFAULT 0,
+        sync_error TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT
       )
@@ -54,63 +53,75 @@ class VacunaService {
 
   Future<List<Vacuna>> getVacunas() async {
     final db = await database;
+    final results = await db.query('vacunas', orderBy: 'fecha_aplicacion DESC');
+    return results.map((json) => Vacuna.fromJson(json)).toList();
+  }
+
+  Future<List<Vacuna>> buscarPorPaciente(int pacienteId) async {
+    final db = await database;
     final results = await db.query(
-      'vacunas', 
-      orderBy: 'fecha_vacunacion DESC'
+      'vacunas',
+      where: 'paciente_id = ?',
+      whereArgs: [pacienteId],
+      orderBy: 'fecha_aplicacion DESC'
     );
     return results.map((json) => Vacuna.fromJson(json)).toList();
   }
 
-  Future<List<Vacuna>> buscarPorCedula(String cedula) async {
+  Future<List<Vacuna>> getUnsyncedVacunas() async {
     final db = await database;
-    final results = await db.query(
-      'vacunas',
-      where: 'cedula_paciente LIKE ?',
-      whereArgs: ['%$cedula%'],
-      orderBy: 'fecha_vacunacion DESC'
-    );
+    final results = await db.query('vacunas', where: 'is_synced = 0');
     return results.map((json) => Vacuna.fromJson(json)).toList();
   }
 
-  Future<List<Vacuna>> buscarPorNombre(String nombre) async {
+  Future<void> markVacunaAsSynced(int localId, int serverId) async {
     final db = await database;
-    final results = await db.query(
+    await db.update(
       'vacunas',
-      where: 'nombre_paciente LIKE ?',
-      whereArgs: ['%$nombre%'],
-      orderBy: 'fecha_vacunacion DESC'
+      {
+        'is_synced': 1,
+        'server_id': serverId,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [localId],
     );
-    return results.map((json) => Vacuna.fromJson(json)).toList();
+  }
+
+  Future<void> saveVacunaFromServer(Map<String, dynamic> vacunaData) async {
+    final db = await database;
+    
+    // Verificar si ya existe por server_id
+    final existing = await db.query(
+      'vacunas',
+      where: 'server_id = ?',
+      whereArgs: [vacunaData['id']],
+    );
+    
+    if (existing.isEmpty) {
+      // Crear nueva vacuna
+      final vacuna = Vacuna(
+        serverId: vacunaData['id'],
+        pacienteId: vacunaData['paciente_id'],
+        nombreVacuna: vacunaData['nombre_vacuna'],
+        fechaAplicacion: vacunaData['fecha_aplicacion'],
+        lote: vacunaData['lote'],
+        proximaDosis: vacunaData['proxima_dosis'],
+        usuarioId: vacunaData['usuario_id'],
+        isSynced: true,
+        createdAt: DateTime.parse(vacunaData['created_at']),
+        updatedAt: vacunaData['updated_at'] != null 
+            ? DateTime.parse(vacunaData['updated_at']) 
+            : null,
+      );
+      
+      await db.insert('vacunas', vacuna.toJson());
+    }
   }
 
   Future<void> close() async {
     if (_database != null) {
       await _database!.close();
     }
-  }
-
-  Future<List<Vacuna>> getUnsyncedVacunas() async {
-  final db = await database;
-  final results = await db.query(
-    'vacunas',
-    where: 'is_synced = 0'
-  );
-  return results.map((json) => Vacuna.fromJson(json)).toList();
-}
-
-  Future<void> markVacunaAsSynced(int localId, int serverId) async {
-    final db = await database;
-    await db.update(
-      'vacunas',
-      {'is_synced': 1, 'server_id': serverId},
-      where: 'id = ?',
-      whereArgs: [localId],
-    );
-  }
-
-  // AGREGAR también este método que falta
-  Future<void> saveVacunaFromServer(Vacuna vacuna) async {
-    final db = await database;
-    await db.insert('vacunas', vacuna.toJson());
   }
 }
