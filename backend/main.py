@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configuración de JWT
-SECRET_KEY = os.environ.get("SECRET_KEY", "healthshield_secret_key")
+SECRET_KEY = os.environ.get("SECRET_KEY", "healthshield_production_secret_key_3312")
 ALGORITHM = "HS256"
 
 def create_access_token(data: dict):
@@ -46,7 +46,7 @@ def create_default_admin(db: Session):
             logger.info("✅ Usuario admin ya existe")
             return
         
-        hashed_password = hash_password("admin123")
+        hashed_password = hash_password("Admin123!")  # Contraseña segura
         
         db_admin = Usuario(
             username="admin",
@@ -68,45 +68,138 @@ def create_default_admin(db: Session):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Lifespan mejorado con manejo de errores
+    """
     # Startup
-    logger.info("🚀 Iniciando HealthShield API...")
-    init_db()
+    logger.info("=" * 50)
+    logger.info("🚀 Iniciando HealthShield API en Render...")
+    logger.info(f"📁 Entorno: {os.environ.get('ENVIRONMENT', 'development')}")
     
-    db = next(get_db())
-    create_default_admin(db)
+    try:
+        # Inicializar base de datos
+        init_db()
+        
+        # Crear admin por defecto
+        db = next(get_db())
+        create_default_admin(db)
+        
+        logger.info("✅ HealthShield API iniciada correctamente")
+        logger.info(f"🔐 Secret Key configurada: {'Sí' if SECRET_KEY else 'No'}")
+        logger.info(f"🌐 CORS Origins: {os.environ.get('ALLOWED_ORIGINS', '*')}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error crítico al iniciar: {e}")
+        logger.warning("⚠️  La API iniciará en modo limitado")
     
-    logger.info("✅ HealthShield API iniciada correctamente")
     yield
+    
     # Shutdown
     logger.info("🛑 Deteniendo HealthShield API...")
+    logger.info("=" * 50)
 
 app = FastAPI(
     title="HealthShield API",
-    version="1.0.0",
-    description="API para gestión de pacientes y vacunas con sincronización offline",
+    version="2.0.0",
+    description="API para gestión de pacientes y vacunas - Desplegado en Render",
     docs_url="/docs",
     redoc_url="/redoc",
+    openapi_url="/openapi.json",
     lifespan=lifespan
 )
 
 # Configuración CORS para producción
-allowed_origins = os.environ.get("ALLOWED_ORIGINS", "").split(",")
-if not allowed_origins or allowed_origins == [""]:
-    allowed_origins = ["*"]
+allowed_origins_str = os.environ.get("ALLOWED_ORIGINS", "*")
+allowed_origins = allowed_origins_str.split(",") if "," in allowed_origins_str else [allowed_origins_str]
+
+logger.info(f"🌍 Configurando CORS para: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
+
+# ==================== ENDPOINTS DE DEBUG ====================
+
+@app.get("/api/debug/env")
+async def debug_env():
+    """
+    Endpoint para debug de variables de entorno (solo desarrollo)
+    """
+    import re
+    
+    env_vars = {}
+    sensitive_keys = ['DATABASE_URL', 'SECRET_KEY', 'PASSWORD', 'TOKEN']
+    
+    for key, value in os.environ.items():
+        if any(sensitive in key.upper() for sensitive in sensitive_keys):
+            # Ocultar información sensible
+            if 'DATABASE_URL' in key.upper() and value:
+                # Ocultar contraseña en URL
+                value = re.sub(r':([^:@]+)@', ':****@', value)
+            elif 'SECRET' in key.upper() and value:
+                value = f"{value[:10]}..." if len(value) > 10 else "****"
+        env_vars[key] = value
+    
+    return {
+        "app": "HealthShield API",
+        "environment": os.environ.get("ENVIRONMENT", "development"),
+        "debug_mode": os.environ.get("DEBUG", "False"),
+        "variables": env_vars,
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/api/debug/db")
+async def debug_db(db: Session = Depends(get_db)):
+    """
+    Endpoint para debug de base de datos
+    """
+    try:
+        # Contar registros
+        pacientes_count = db.query(Paciente).count()
+        vacunas_count = db.query(Vacuna).count()
+        usuarios_count = db.query(Usuario).count()
+        
+        # Obtener información de tablas
+        from sqlalchemy import text
+        tables_info = db.execute(text("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+            ORDER BY table_name
+        """)).fetchall()
+        
+        tables = [table[0] for table in tables_info]
+        
+        return {
+            "database_status": "connected",
+            "tables": tables,
+            "counts": {
+                "pacientes": pacientes_count,
+                "vacunas": vacunas_count,
+                "usuarios": usuarios_count
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "database_status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 # ==================== ENDPOINTS DE AUTENTICACIÓN ====================
 
 @app.post("/api/auth/register", response_model=AuthResponse, status_code=201)
 async def register(usuario: UsuarioCreate, db: Session = Depends(get_db)):
     """Registrar un nuevo usuario"""
+    logger.info(f"📝 Registrando usuario: {usuario.username}")
+    
     if UsuarioRepository.get_by_username(db, usuario.username):
         raise HTTPException(status_code=400, detail="El usuario ya existe")
     
@@ -116,6 +209,8 @@ async def register(usuario: UsuarioCreate, db: Session = Depends(get_db)):
     try:
         db_usuario = UsuarioRepository.create(db, usuario)
         access_token = create_access_token({"sub": usuario.username, "user_id": db_usuario.id})
+        
+        logger.info(f"✅ Usuario registrado: {usuario.username}")
         
         return AuthResponse(
             message="Usuario registrado exitosamente",
@@ -134,16 +229,22 @@ async def register(usuario: UsuarioCreate, db: Session = Depends(get_db)):
         )
         
     except Exception as e:
+        logger.error(f"❌ Error registrando usuario: {e}")
         raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
 
 @app.post("/api/auth/login", response_model=AuthResponse)
 async def login(login_data: UserLogin, db: Session = Depends(get_db)):
     """Iniciar sesión"""
+    logger.info(f"🔐 Login intento: {login_data.username}")
+    
     usuario = UsuarioRepository.authenticate(db, login_data.username, login_data.password)
     if not usuario:
+        logger.warning(f"❌ Login fallido: {login_data.username}")
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     
     access_token = create_access_token(data={"sub": usuario.username, "user_id": usuario.id})
+    
+    logger.info(f"✅ Login exitoso: {login_data.username}")
     
     return AuthResponse(
         message="Login exitoso",
@@ -161,40 +262,21 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
         token=access_token
     )
 
-# ==================== ENDPOINTS DE USUARIOS ====================
-
-@app.get("/api/users", response_model=List[UsuarioResponse])
-async def get_usuarios(db: Session = Depends(get_db)):
-    """Obtener todos los usuarios"""
-    try:
-        usuarios = UsuarioRepository.get_all(db)
-        return [
-            UsuarioResponse(
-                id=usuario.id,
-                username=usuario.username,
-                email=usuario.email,
-                telefono=usuario.telefono,
-                is_professional=usuario.is_professional,
-                professional_license=usuario.professional_license,
-                is_verified=usuario.is_verified,
-                created_at=usuario.created_at,
-                updated_at=usuario.updated_at
-            ) for usuario in usuarios
-        ]
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
-
 # ==================== ENDPOINTS DE PACIENTES ====================
 
 @app.post("/api/pacientes", response_model=MessageResponse, status_code=201)
 async def add_paciente(paciente: PacienteCreate, db: Session = Depends(get_db)):
     """Agregar un nuevo paciente"""
+    logger.info(f"➕ Agregando paciente: {paciente.nombre}")
+    
     if PacienteRepository.get_by_cedula(db, paciente.cedula):
         raise HTTPException(status_code=400, detail="La cédula ya está registrada")
     
     try:
         db_paciente = PacienteRepository.create(db, paciente)
+        
+        logger.info(f"✅ Paciente agregado: {paciente.nombre} (ID: {db_paciente.id})")
+        
         return MessageResponse(
             message='Paciente agregado correctamente',
             id=db_paciente.id,
@@ -202,13 +284,24 @@ async def add_paciente(paciente: PacienteCreate, db: Session = Depends(get_db)):
         )
         
     except Exception as e:
+        logger.error(f"❌ Error agregando paciente: {e}")
         raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
 
 @app.get("/api/pacientes", response_model=List[PacienteResponse])
-async def get_pacientes(db: Session = Depends(get_db)):
-    """Obtener todos los pacientes"""
+async def get_pacientes(
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100
+):
+    """Obtener todos los pacientes con paginación"""
+    logger.info(f"📋 Obteniendo pacientes (skip={skip}, limit={limit})")
+    
     try:
-        pacientes = PacienteRepository.get_all(db)
+        pacientes = PacienteRepository.get_all(db, skip=skip, limit=limit)
+        total = db.query(Paciente).count()
+        
+        logger.info(f"✅ Encontrados {len(pacientes)}/{total} pacientes")
+        
         return [
             PacienteResponse(
                 id=paciente.id,
@@ -223,30 +316,7 @@ async def get_pacientes(db: Session = Depends(get_db)):
         ]
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
-
-@app.get("/api/pacientes/{paciente_id}", response_model=PacienteResponse)
-async def get_paciente(paciente_id: int, db: Session = Depends(get_db)):
-    """Obtener un paciente específico"""
-    try:
-        paciente = PacienteRepository.get_by_id(db, paciente_id)
-        if not paciente:
-            raise HTTPException(status_code=404, detail="Paciente no encontrado")
-        
-        return PacienteResponse(
-            id=paciente.id,
-            cedula=paciente.cedula,
-            nombre=paciente.nombre,
-            fecha_nacimiento=paciente.fecha_nacimiento,
-            telefono=paciente.telefono,
-            direccion=paciente.direccion,
-            created_at=paciente.created_at.isoformat() if paciente.created_at else None,
-            updated_at=paciente.updated_at.isoformat() if paciente.updated_at else None
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
+        logger.error(f"❌ Error obteniendo pacientes: {e}")
         raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
 
 # ==================== ENDPOINTS DE VACUNAS ====================
@@ -254,8 +324,13 @@ async def get_paciente(paciente_id: int, db: Session = Depends(get_db)):
 @app.post("/api/vacunas", response_model=MessageResponse, status_code=201)
 async def add_vacuna(vacuna: VacunaCreate, db: Session = Depends(get_db)):
     """Registrar una nueva vacuna"""
+    logger.info(f"💉 Registrando vacuna para paciente ID: {vacuna.paciente_id}")
+    
     try:
         db_vacuna = VacunaRepository.create(db, vacuna)
+        
+        logger.info(f"✅ Vacuna registrada: {vacuna.nombre_vacuna} (ID: {db_vacuna.id})")
+        
         return MessageResponse(
             message='Vacuna registrada correctamente',
             id=db_vacuna.id,
@@ -263,146 +338,30 @@ async def add_vacuna(vacuna: VacunaCreate, db: Session = Depends(get_db)):
         )
         
     except ValueError as e:
+        logger.error(f"❌ Error validando vacuna: {e}")
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
-
-@app.get("/api/pacientes/{paciente_id}/vacunas", response_model=List[VacunaResponse])
-async def get_vacunas_paciente(paciente_id: int, db: Session = Depends(get_db)):
-    """Obtener todas las vacunas de un paciente"""
-    try:
-        vacunas = VacunaRepository.get_by_paciente(db, paciente_id)
-        return [
-            VacunaResponse(
-                id=vacuna.id,
-                paciente_id=vacuna.paciente_id,
-                nombre_vacuna=vacuna.nombre_vacuna,
-                fecha_aplicacion=vacuna.fecha_aplicacion,
-                lote=vacuna.lote,
-                proxima_dosis=vacuna.proxima_dosis,
-                usuario_id=vacuna.usuario_id,
-                created_at=vacuna.created_at.isoformat() if vacuna.created_at else None,
-                paciente_nombre=vacuna.paciente.nombre if vacuna.paciente else None,
-                usuario_nombre=vacuna.usuario.username if vacuna.usuario else None
-            ) for vacuna in vacunas
-        ]
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
-
-@app.get("/api/vacunas", response_model=List[VacunaResponse])
-async def get_all_vacunas(db: Session = Depends(get_db)):
-    """Obtener todas las vacunas"""
-    try:
-        vacunas = VacunaRepository.get_all(db)
-        return [
-            VacunaResponse(
-                id=vacuna.id,
-                paciente_id=vacuna.paciente_id,
-                nombre_vacuna=vacuna.nombre_vacuna,
-                fecha_aplicacion=vacuna.fecha_aplicacion,
-                lote=vacuna.lote,
-                proxima_dosis=vacuna.proxima_dosis,
-                usuario_id=vacuna.usuario_id,
-                created_at=vacuna.created_at.isoformat() if vacuna.created_at else None,
-                paciente_nombre=vacuna.paciente.nombre if vacuna.paciente else None,
-                usuario_nombre=vacuna.usuario.username if vacuna.usuario else None
-            ) for vacuna in vacunas
-        ]
-        
-    except Exception as e:
+        logger.error(f"❌ Error registrando vacuna: {e}")
         raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
 
 # ==================== ENDPOINTS DE SINCRONIZACIÓN ====================
-
-@app.post("/api/sync/pacientes")
-async def sync_pacientes(
-    request: SyncPacientesRequest,
-    db: Session = Depends(get_db)
-):
-    """Sincronizar múltiples pacientes desde el móvil"""
-    resultados = []
-    pacientes_map = {}
-    
-    for paciente_data in request.pacientes:
-        try:
-            # Usar create_or_update que verifica por cédula
-            paciente_dict = paciente_data.dict()
-            paciente = PacienteRepository.create_or_update(db, paciente_dict)
-            
-            resultados.append({
-                'local_id': paciente_data.local_id,
-                'server_id': paciente.id,
-                'action': 'created_or_updated',
-                'success': True
-            })
-            
-            pacientes_map[paciente_data.local_id] = paciente.id
-            
-        except Exception as e:
-            logger.error(f"Error sincronizando paciente {paciente_data.local_id}: {e}")
-            resultados.append({
-                'local_id': paciente_data.local_id,
-                'error': str(e),
-                'success': False
-            })
-    
-    return {
-        'message': 'Sincronización de pacientes completada',
-        'results': resultados,
-        'pacientes_map': pacientes_map
-    }
-
-@app.post("/api/sync/vacunas")
-async def sync_vacunas(
-    request: SyncVacunasRequest,
-    db: Session = Depends(get_db)
-):
-    """Sincronizar múltiples vacunas desde el móvil"""
-    resultados = []
-    
-    for vacuna_data in request.vacunas:
-        try:
-            vacuna_dict = vacuna_data.dict()
-            vacuna = VacunaRepository.create_with_patient_check(db, vacuna_dict)
-            
-            resultados.append({
-                'local_id': vacuna_data.local_id,
-                'server_id': vacuna.id,
-                'action': 'created',
-                'success': True
-            })
-            
-        except ValueError as e:
-            logger.error(f"Error paciente no encontrado para vacuna {vacuna_data.local_id}: {e}")
-            resultados.append({
-                'local_id': vacuna_data.local_id,
-                'error': str(e),
-                'success': False
-            })
-        except Exception as e:
-            logger.error(f"Error sincronizando vacuna {vacuna_data.local_id}: {e}")
-            resultados.append({
-                'local_id': vacuna_data.local_id,
-                'error': str(e),
-                'success': False
-            })
-    
-    return {
-        'message': 'Sincronización de vacunas completada',
-        'results': resultados
-    }
 
 @app.post("/api/sync/full")
 async def full_sync(
     request: SyncFullRequest,
     db: Session = Depends(get_db)
 ):
-    """Sincronización completa bidireccional"""
-    # 1. Sincronizar pacientes
-    pacientes_result = []
+    """
+    Sincronización completa bidireccional
+    Para uso del frontend móvil
+    """
+    logger.info(f"🔄 Iniciando sync completo - Pacientes: {len(request.pacientes)}, Vacunas: {len(request.vacunas)}")
+    
+    start_time = datetime.now()
     pacientes_map = {}
     
+    # 1. Sincronizar pacientes
+    pacientes_result = []
     for paciente_data in request.pacientes:
         try:
             paciente_dict = paciente_data.dict()
@@ -417,16 +376,18 @@ async def full_sync(
             
             pacientes_map[paciente_data.local_id] = paciente.id
             
+            logger.debug(f"✅ Paciente sync: {paciente.nombre} (local:{paciente_data.local_id} -> server:{paciente.id})")
+            
         except Exception as e:
+            logger.error(f"❌ Error sync paciente {paciente_data.local_id}: {e}")
             pacientes_result.append({
                 'local_id': paciente_data.local_id,
                 'error': str(e),
                 'success': False
             })
     
-    # 2. Sincronizar vacunas (usando el mapeo de IDs)
+    # 2. Sincronizar vacunas
     vacunas_result = []
-    
     for vacuna_data in request.vacunas:
         try:
             vacuna_dict = vacuna_data.dict()
@@ -445,19 +406,29 @@ async def full_sync(
                 'success': True
             })
             
+            logger.debug(f"✅ Vacuna sync: {vacuna.nombre_vacuna} (local:{vacuna_data.local_id} -> server:{vacuna.id})")
+            
         except Exception as e:
+            logger.error(f"❌ Error sync vacuna {vacuna_data.local_id}: {e}")
             vacunas_result.append({
                 'local_id': vacuna_data.local_id,
                 'error': str(e),
                 'success': False
             })
     
-    # 3. Obtener todos los datos actualizados para enviar al cliente
-    all_pacientes = PacienteRepository.get_all(db)
-    all_vacunas = VacunaRepository.get_all(db)
+    # 3. Obtener datos actualizados
+    all_pacientes = PacienteRepository.get_all(db, limit=1000)
+    all_vacunas = VacunaRepository.get_all(db, limit=1000)
+    
+    sync_duration = (datetime.now() - start_time).total_seconds()
+    
+    logger.info(f"✅ Sync completado en {sync_duration:.2f}s - "
+                f"Pacientes: {len(pacientes_result)}, Vacunas: {len(vacunas_result)}")
     
     return {
+        'success': True,
         'message': 'Sincronización completa exitosa',
+        'duration_seconds': sync_duration,
         'upload_results': {
             'pacientes': pacientes_result,
             'vacunas': vacunas_result
@@ -489,73 +460,23 @@ async def full_sync(
         }
     }
 
-@app.get("/api/sync/updates")
-async def get_updates(
-    last_sync: str = Query("1970-01-01T00:00:00Z", description="Fecha de última sincronización"),
-    db: Session = Depends(get_db)
-):
-    """Obtener actualizaciones desde la última sincronización"""
-    try:
-        updates = []
-        
-        # Obtener pacientes actualizados
-        pacientes = db.query(Paciente).filter(Paciente.created_at > last_sync).all()
-        for paciente in pacientes:
-            paciente_data = {
-                'tipo': 'paciente',
-                'id': paciente.id,
-                'cedula': paciente.cedula,
-                'nombre': paciente.nombre,
-                'fecha_nacimiento': paciente.fecha_nacimiento,
-                'telefono': paciente.telefono,
-                'direccion': paciente.direccion,
-                'created_at': paciente.created_at.isoformat() if paciente.created_at else None
-            }
-            updates.append(paciente_data)
-        
-        # Obtener vacunas actualizadas
-        vacunas = db.query(Vacuna).filter(Vacuna.created_at > last_sync).all()
-        for vacuna in vacunas:
-            vacuna_data = {
-                'tipo': 'vacuna',
-                'id': vacuna.id,
-                'paciente_id': vacuna.paciente_id,
-                'nombre_vacuna': vacuna.nombre_vacuna,
-                'fecha_aplicacion': vacuna.fecha_aplicacion,
-                'lote': vacuna.lote,
-                'proxima_dosis': vacuna.proxima_dosis,
-                'usuario_id': vacuna.usuario_id,
-                'created_at': vacuna.created_at.isoformat() if vacuna.created_at else None
-            }
-            updates.append(vacuna_data)
-        
-        return SyncResponse(
-            message="Actualizaciones obtenidas correctamente",
-            updates_count=len(updates),
-            last_sync=datetime.now().isoformat(),
-            updates=updates
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'Error del servidor: {str(e)}')
-
-# ==================== ENDPOINTS DE UTILIDAD ====================
+# ==================== ENDPOINTS DE HEALTH CHECK ====================
 
 @app.get("/", response_model=HealthCheck)
 async def root():
-    """Endpoint raíz - Información básica del API"""
+    """Endpoint raíz"""
     return HealthCheck(
         status="healthy",
         timestamp=datetime.now().isoformat(),
         environment=os.environ.get('ENVIRONMENT', 'development'),
-        database="PostgreSQL"
+        database="PostgreSQL" if os.environ.get('ENVIRONMENT') == 'production' else "SQLite"
     )
 
 @app.get("/health", response_model=HealthCheck)
 async def health_check(db: Session = Depends(get_db)):
-    """Health check completo"""
+    """Health check completo para Render"""
     try:
-        # Verificar conexión a la base de datos
+        # Test de conexión a DB
         db.execute('SELECT 1')
         db_status = "connected"
         
@@ -564,28 +485,54 @@ async def health_check(db: Session = Depends(get_db)):
         vacunas_count = db.query(Vacuna).count()
         usuarios_count = db.query(Usuario).count()
         
+        # Obtener info del sistema
+        import platform
+        import sys
+        
+        return HealthCheck(
+            status="healthy",
+            timestamp=datetime.now().isoformat(),
+            environment=os.environ.get('ENVIRONMENT', 'development'),
+            database=db_status,
+            metrics={
+                "pacientes_count": pacientes_count,
+                "vacunas_count": vacunas_count,
+                "usuarios_count": usuarios_count,
+                "python_version": platform.python_version(),
+                "system": platform.system(),
+                "memory_usage": "N/A"  # Podrías agregar psutil para más detalles
+            }
+        )
+        
     except Exception as e:
-        db_status = f"error: {str(e)}"
-        pacientes_count = 0
-        vacunas_count = 0
-        usuarios_count = 0
+        logger.error(f"❌ Health check failed: {e}")
+        return HealthCheck(
+            status="unhealthy",
+            timestamp=datetime.now().isoformat(),
+            environment=os.environ.get('ENVIRONMENT', 'development'),
+            database=f"error: {str(e)}",
+            metrics={"error": str(e)}
+        )
+
+# ==================== MIDDLEWARE ADICIONAL ====================
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    """Middleware para log de requests"""
+    start_time = datetime.now()
     
-    return HealthCheck(
-        status="healthy",
-        timestamp=datetime.now().isoformat(),
-        environment=os.environ.get('ENVIRONMENT', 'development'),
-        database=db_status,
-        metrics={
-            "pacientes_count": pacientes_count,
-            "vacunas_count": vacunas_count,
-            "usuarios_count": usuarios_count
-        }
-    )
+    response = await call_next(request)
+    
+    duration = (datetime.now() - start_time).total_seconds() * 1000
+    
+    logger.info(f"{request.method} {request.url.path} - Status: {response.status_code} - {duration:.2f}ms")
+    
+    return response
 
 if __name__ == "__main__":
     import uvicorn
     
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 10000))
     
     uvicorn.run(
         app,

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from models import Usuario, Paciente, Vacuna, UsuarioCreate, PacienteCreate, VacunaCreate
 from database import hash_password, verify_password
 from typing import List, Optional, Dict, Any
@@ -56,8 +56,14 @@ class PacienteRepository:
         return db.query(Paciente).filter(Paciente.cedula == cedula).first()
     
     @staticmethod
-    def get_all(db: Session, skip: int = 0, limit: int = 100) -> List[Paciente]:
-        return db.query(Paciente).offset(skip).limit(limit).all()
+    def get_all(db: Session, skip: int = 0, limit: int = 1000) -> List[Paciente]:
+        return db.query(Paciente).order_by(Paciente.id.desc()).offset(skip).limit(limit).all()
+    
+    @staticmethod
+    def get_recent(db: Session, hours: int = 24) -> List[Paciente]:
+        from datetime import datetime, timedelta
+        since = datetime.now() - timedelta(hours=hours)
+        return db.query(Paciente).filter(Paciente.created_at >= since).all()
     
     @staticmethod
     def create(db: Session, paciente: PacienteCreate) -> Paciente:
@@ -75,20 +81,23 @@ class PacienteRepository:
     
     @staticmethod
     def create_or_update(db: Session, paciente_data: Dict[str, Any]) -> Paciente:
-        """Crear o actualizar paciente basado en cédula"""
+        """Crear o actualizar paciente basado en cédula (para sync)"""
         existing = PacienteRepository.get_by_cedula(db, paciente_data['cedula'])
         
         if existing:
-            # Actualizar campos
-            for key, value in paciente_data.items():
-                if key != 'id' and hasattr(existing, key):
-                    setattr(existing, key, value)
+            # Actualizar campos existentes
+            update_fields = ['nombre', 'fecha_nacimiento', 'telefono', 'direccion']
+            for field in update_fields:
+                if field in paciente_data and paciente_data[field] is not None:
+                    setattr(existing, field, paciente_data[field])
+            
+            existing.updated_at = func.now()
             existing.last_sync = func.now()
             db.commit()
             db.refresh(existing)
             return existing
         else:
-            # Crear nuevo
+            # Crear nuevo paciente
             db_paciente = Paciente(
                 cedula=paciente_data['cedula'],
                 nombre=paciente_data['nombre'],
@@ -111,15 +120,21 @@ class VacunaRepository:
         return db.query(Vacuna).filter(Vacuna.paciente_id == paciente_id).all()
     
     @staticmethod
-    def get_all(db: Session, skip: int = 0, limit: int = 100) -> List[Vacuna]:
-        return db.query(Vacuna).offset(skip).limit(limit).all()
+    def get_all(db: Session, skip: int = 0, limit: int = 1000) -> List[Vacuna]:
+        return db.query(Vacuna).order_by(Vacuna.id.desc()).offset(skip).limit(limit).all()
+    
+    @staticmethod
+    def get_recent(db: Session, hours: int = 24) -> List[Vacuna]:
+        from datetime import datetime, timedelta
+        since = datetime.now() - timedelta(hours=hours)
+        return db.query(Vacuna).filter(Vacuna.created_at >= since).all()
     
     @staticmethod
     def create(db: Session, vacuna: VacunaCreate) -> Vacuna:
         # Verificar que el paciente existe
         paciente = PacienteRepository.get_by_id(db, vacuna.paciente_id)
         if not paciente:
-            raise ValueError("Paciente no encontrado")
+            raise ValueError(f"Paciente con ID {vacuna.paciente_id} no encontrado")
         
         db_vacuna = Vacuna(
             paciente_id=vacuna.paciente_id,
@@ -136,7 +151,7 @@ class VacunaRepository:
     
     @staticmethod
     def create_with_patient_check(db: Session, vacuna_data: Dict[str, Any]) -> Vacuna:
-        """Crear vacuna verificando que el paciente existe"""
+        """Crear vacuna verificando que el paciente existe (para sync)"""
         paciente_id = vacuna_data['paciente_id']
         
         # Verificar que el paciente existe
