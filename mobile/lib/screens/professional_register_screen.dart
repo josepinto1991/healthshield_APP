@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
 import '../models/usuario.dart';
 
 class ProfessionalRegisterScreen extends StatefulWidget {
@@ -10,64 +11,131 @@ class ProfessionalRegisterScreen extends StatefulWidget {
 
 class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _cedulaController = TextEditingController();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _telefonoController = TextEditingController();
   
-  bool _isLoading = false;
-  bool _isProfessional = false;
+  bool _isVerifying = false;
+  bool _isVerified = false;
+  bool _isRegistering = false;
+  Map<String, dynamic>? _verificationResult;
 
-  Future<void> _register() async {
-    if (_formKey.currentState!.validate()) {
-      if (_passwordController.text != _confirmPasswordController.text) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Las contraseñas no coinciden')),
-        );
-        return;
-      }
-
-      setState(() {
-        _isLoading = true;
-      });
-
-      final authService = Provider.of<AuthService>(context, listen: false);
-
-      final nuevoUsuario = Usuario(
-        username: _usernameController.text,
-        email: _emailController.text,
-        password: _passwordController.text,
-        telefono: _telefonoController.text.isEmpty ? null : _telefonoController.text,
-        isProfessional: _isProfessional,
-        isVerified: true, // Todos verificados ahora
-        isSynced: false,
-        createdAt: DateTime.now(),
+  Future<void> _verifyProfessional() async {
+    if (_cedulaController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Por favor ingresa tu cédula')),
       );
+      return;
+    }
 
-      final success = await authService.registrarUsuario(nuevoUsuario);
+    setState(() {
+      _isVerifying = true;
+      _isVerified = false;
+      _verificationResult = null;
+    });
 
-      setState(() {
-        _isLoading = false;
-      });
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    
+    final result = await apiService.verifyProfessional(_cedulaController.text);
 
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Usuario registrado exitosamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        Navigator.pushReplacementNamed(context, '/login');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error: El usuario o email ya existe'),
-            backgroundColor: Colors.red,
-          ),
-        );
+    setState(() {
+      _isVerifying = false;
+      _isVerified = result['is_valid'] ?? false;
+      _verificationResult = result;
+    });
+
+    if (_isVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ ${result['message']}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      // Auto-completar username con cédula
+      if (_usernameController.text.isEmpty) {
+        _usernameController.text = _cedulaController.text;
       }
+      
+      // Sugerir email basado en nombre
+      if (_emailController.text.isEmpty && result['professional_name'] != null) {
+        final name = result['professional_name'].toString().toLowerCase();
+        final email = name.replaceAll(' ', '.').replaceAll(RegExp(r'[^a-z.]'), '');
+        _emailController.text = '$email@salud.gob.ve';
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ ${result['message']}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _completeRegistration() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    if (!_isVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Debes verificar tu cédula primero')),
+      );
+      return;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Las contraseñas no coinciden')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isRegistering = true;
+    });
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+
+    final nuevoUsuario = Usuario(
+      username: _usernameController.text,
+      email: _emailController.text,
+      password: _passwordController.text,
+      telefono: _telefonoController.text.isEmpty ? null : _telefonoController.text,
+      isProfessional: true,
+      professionalLicense: _verificationResult?['professional_license'],
+      isVerified: true,
+      isSynced: false, // Se sincronizará con el servidor
+      createdAt: DateTime.now(),
+    );
+
+    final result = await authService.registrarUsuarioProfesional(
+      usuario: nuevoUsuario,
+      cedulaVerificacion: _cedulaController.text,
+    );
+
+    setState(() {
+      _isRegistering = false;
+    });
+
+    if (result['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ ${result['message']}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      Navigator.pushReplacementNamed(context, '/login');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ ${result['error']}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -96,20 +164,64 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Crear Cuenta',
+                'Registro de Profesional',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
               
               SizedBox(height: 8),
               
               Text(
-                'Regístrate para comenzar a usar HealthShield',
+                'Verificación requerida para profesionales de salud',
                 style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               ),
               
               SizedBox(height: 32),
               
-              // Campo Usuario
+              // Cédula para verificación
+              Text('Cédula de Identidad *', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _cedulaController,
+                      decoration: InputDecoration(
+                        hintText: 'Ej: 12345678',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.badge),
+                        suffixIcon: _isVerified 
+                            ? Icon(Icons.verified, color: Colors.green)
+                            : null,
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'La cédula es obligatoria para verificación';
+                        }
+                        if (value.length < 6) {
+                          return 'La cédula debe tener al menos 6 dígitos';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  _isVerifying
+                      ? CircularProgressIndicator()
+                      : ElevatedButton(
+                          onPressed: _isVerifying ? null : _verifyProfessional,
+                          child: Text('Verificar'),
+                        ),
+                ],
+              ),
+              
+              // Resultado de verificación
+              if (_verificationResult != null)
+                _buildVerificationResultCard(),
+              
+              SizedBox(height: 24),
+              
+              // Campos de registro
               Text('Usuario *', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
               TextFormField(
@@ -121,10 +233,7 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa un usuario';
-                  }
-                  if (value.length < 3) {
-                    return 'El usuario debe tener al menos 3 caracteres';
+                    return 'El usuario es obligatorio';
                   }
                   return null;
                 },
@@ -132,19 +241,18 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
               
               SizedBox(height: 16),
               
-              // Campo Email
               Text('Correo Electrónico *', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
               TextFormField(
                 controller: _emailController,
                 decoration: InputDecoration(
-                  hintText: 'ejemplo@correo.com',
+                  hintText: 'ejemplo@salud.gob.ve',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.email),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa un email';
+                    return 'El email es obligatorio';
                   }
                   if (!value.contains('@')) {
                     return 'Ingresa un email válido';
@@ -155,7 +263,6 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
               
               SizedBox(height: 16),
               
-              // Campo Teléfono
               Text('Teléfono (Opcional)', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
               TextFormField(
@@ -170,21 +277,6 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
               
               SizedBox(height: 16),
               
-              // Checkbox Profesional
-              CheckboxListTile(
-                title: Text('Soy profesional de salud'),
-                value: _isProfessional,
-                onChanged: (value) {
-                  setState(() {
-                    _isProfessional = value ?? false;
-                  });
-                },
-                secondary: Icon(Icons.medical_services),
-              ),
-              
-              SizedBox(height: 16),
-              
-              // Campo Contraseña
               Text('Contraseña *', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
               TextFormField(
@@ -197,7 +289,7 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa una contraseña';
+                    return 'La contraseña es obligatoria';
                   }
                   if (value.length < 6) {
                     return 'La contraseña debe tener al menos 6 caracteres';
@@ -208,7 +300,6 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
               
               SizedBox(height: 16),
               
-              // Confirmar Contraseña
               Text('Confirmar Contraseña *', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
               TextFormField(
@@ -221,7 +312,7 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Por favor confirma tu contraseña';
+                    return 'Confirma tu contraseña';
                   }
                   return null;
                 },
@@ -229,36 +320,48 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
               
               SizedBox(height: 32),
               
-              // Botón Registro
+              // Botón de registro
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _register,
+                  onPressed: _isRegistering ? null : _completeRegistration,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: _isVerified ? Colors.green : Colors.grey,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: _isLoading
+                  child: _isRegistering
                       ? CircularProgressIndicator(color: Colors.white)
-                      : Text('Registrarse', style: TextStyle(fontSize: 16)),
+                      : Text(
+                          _isVerified ? 'Completar Registro' : 'Verifica tu cédula primero',
+                          style: TextStyle(fontSize: 16),
+                        ),
                 ),
               ),
               
               SizedBox(height: 16),
               
-              // Enlace a Login
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/login');
-                  },
-                  child: Text(
-                    '¿Ya tienes cuenta? Inicia Sesión',
-                    style: TextStyle(color: Colors.blue),
+              // Información
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Información del Proceso',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 8),
+                      Text('• Solo profesionales de salud pueden registrarse'),
+                      Text('• La verificación requiere conexión a internet'),
+                      Text('• Se consulta el registro oficial del SACS'),
+                      Text('• El login posterior funciona sin conexión'),
+                      Text('• Fuente: https://sistemas.sacs.gob.ve'),
+                    ],
                   ),
                 ),
               ),
@@ -269,8 +372,47 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
     );
   }
 
+  Widget _buildVerificationResultCard() {
+    return Card(
+      color: _isVerified ? Colors.green[50] : Colors.orange[50],
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _isVerified ? Icons.verified : Icons.warning,
+                  color: _isVerified ? Colors.green : Colors.orange,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  _isVerified ? 'Verificación Exitosa' : 'Verificación Requerida',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: _isVerified ? Colors.green : Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Text(_verificationResult!['message']),
+            if (_verificationResult!['professional_name'] != null)
+              Text('Nombre: ${_verificationResult!['professional_name']}'),
+            if (_verificationResult!['especialidad'] != null)
+              Text('Especialidad: ${_verificationResult!['especialidad']}'),
+            if (_verificationResult!['professional_license'] != null)
+              Text('Matrícula: ${_verificationResult!['professional_license']}'),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _cedulaController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();

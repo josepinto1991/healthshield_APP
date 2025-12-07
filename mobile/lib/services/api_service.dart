@@ -4,8 +4,7 @@ import '../models/usuario.dart';
 import '../models/vacuna.dart';
 
 class ApiService {
-  // static const String baseUrl = 'http://192.168.1.100:5001/api';
-  static const String baseUrl = 'https://healthshield-backend.onrender.com/api';
+  static const String baseUrl = 'http://192.168.1.100:5001/api';
 
   final Map<String, String> headers = {
     'Content-Type': 'application/json',

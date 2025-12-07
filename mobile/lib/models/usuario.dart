@@ -1,16 +1,16 @@
 class Usuario {
-  final int? id;
-  final int? serverId;
-  final String username;
-  final String email;
-  final String password;
-  final String? telefono;
-  final bool isProfessional;
-  final String? professionalLicense;
-  final bool isVerified;
-  final bool isSynced;
-  final DateTime createdAt;
-  final DateTime? updatedAt;
+  int? id;
+  int? serverId;
+  String username;
+  String email;
+  String password;
+  String? telefono;
+  bool isProfessional;
+  String? professionalLicense;
+  bool isVerified;
+  bool isSynced;
+  DateTime createdAt;
+  DateTime? updatedAt;
 
   Usuario({
     this.id,
@@ -27,25 +27,75 @@ class Usuario {
     this.updatedAt,
   });
 
-  // Constructor para usuario vacío
-  Usuario.empty()
-      : id = null,
-        serverId = null,
-        username = '',
-        email = '',
-        password = '',
-        telefono = null,
-        isProfessional = false,
-        professionalLicense = null,
-        isVerified = false,
-        isSynced = false,
-        createdAt = DateTime.now(),
-        updatedAt = null;
+  factory Usuario.fromJson(Map<String, dynamic> json) {
+    return Usuario(
+      id: json['id'],
+      serverId: json['server_id'],
+      username: json['username'],
+      email: json['email'],
+      password: json['password'],
+      telefono: json['telefono'],
+      isProfessional: json['is_professional'] == 1 || json['is_professional'] == true,
+      professionalLicense: json['professional_license'],
+      isVerified: json['is_verified'] == 1 || json['is_verified'] == true,
+      isSynced: json['is_synced'] == 1 || json['is_synced'] == true,
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+    );
+  }
 
-  // Verificar si el usuario está vacío
-  bool get isEmpty => username.isEmpty;
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'server_id': serverId,
+      'username': username,
+      'email': email,
+      'password': password,
+      'telefono': telefono,
+      'is_professional': isProfessional ? 1 : 0,
+      'professional_license': professionalLicense,
+      'is_verified': isVerified ? 1 : 0,
+      'is_synced': isSynced ? 1 : 0,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+    };
+  }
 
-  // Copiar usuario con nuevos valores
+  Map<String, dynamic> toServerJson() {
+    return {
+      'username': username,
+      'email': email,
+      'password': password,
+      'telefono': telefono,
+      'is_professional': isProfessional,
+      'professional_license': professionalLicense,
+      'local_id': id,
+    };
+  }
+
+  Map<String, dynamic> toLoginJson() {
+    return {
+      'username': username,
+      'password': password,
+    };
+  }
+
+  // Método para crear un usuario vacío
+  static Usuario empty() {
+    return Usuario(
+      username: '',
+      email: '',
+      password: '',
+      createdAt: DateTime.now(),
+    );
+  }
+
+  // Método para verificar si el usuario está vacío
+  bool get isEmpty {
+    return username.isEmpty || email.isEmpty || password.isEmpty;
+  }
+
+  // Método para copiar el usuario con nuevos valores
   Usuario copyWith({
     int? id,
     int? serverId,
@@ -74,58 +124,5 @@ class Usuario {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
-  }
-
-  // Convertir a JSON para enviar al servidor
-  Map<String, dynamic> toServerJson() {
-    return {
-      'username': username,
-      'email': email,
-      'password': password,
-      'telefono': telefono,
-      'is_professional': isProfessional,
-      'professional_license': professionalLicense,
-    };
-  }
-
-  // Convertir a JSON para guardar localmente
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'server_id': serverId,
-      'username': username,
-      'email': email,
-      'password': password,
-      'telefono': telefono,
-      'is_professional': isProfessional ? 1 : 0,
-      'professional_license': professionalLicense,
-      'is_verified': isVerified ? 1 : 0,
-      'is_synced': isSynced ? 1 : 0,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
-    };
-  }
-
-  // Crear usuario desde JSON
-  factory Usuario.fromJson(Map<String, dynamic> json) {
-    return Usuario(
-      id: json['id'],
-      serverId: json['server_id'],
-      username: json['username'],
-      email: json['email'],
-      password: json['password'],
-      telefono: json['telefono'],
-      isProfessional: json['is_professional'] == 1,
-      professionalLicense: json['professional_license'],
-      isVerified: json['is_verified'] == 1,
-      isSynced: json['is_synced'] == 1,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
-    );
-  }
-
-  @override
-  String toString() {
-    return 'Usuario{id: $id, username: $username, email: $email, isProfessional: $isProfessional, isVerified: $isVerified}';
   }
 }

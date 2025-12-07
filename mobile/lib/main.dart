@@ -8,13 +8,15 @@ import 'package:healthshield/services/bidirectional_sync_service.dart';
 import 'package:healthshield/db_sqlite/cache_service.dart';
 import 'package:healthshield/screens/welcome_screen.dart';
 import 'package:healthshield/screens/login_screen.dart';
+// CAMBIAR ESTA LÍNEA:
+// import 'package:healthshield/screens/register_screen.dart';
+// POR:
 import 'package:healthshield/screens/professional_register_screen.dart';
 import 'package:healthshield/screens/main_menu_screen.dart';
 import 'package:healthshield/screens/registro_vacuna_screen.dart';
 import 'package:healthshield/screens/visualizar_registros_screen.dart';
 import 'package:healthshield/screens/sync_screen.dart';
 import 'package:healthshield/screens/change_password_screen.dart';
-import 'package:healthshield/screens/dashboard_screen.dart'; // AGREGAR ESTA LÍNEA
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,14 +108,16 @@ class MyApp extends StatelessWidget {
         routes: {
           '/welcome': (context) => WelcomeScreen(),
           '/login': (context) => LoginScreen(),
-          '/register': (context) => ProfessionalRegisterScreen(), // Mantener este nombre
+          // CAMBIAR ESTA RUTA:
+          // '/register': (context) => RegisterScreen(),
+          // POR:
+          '/register': (context) => ProfessionalRegisterScreen(),
           '/register-professional': (context) => ProfessionalRegisterScreen(),
           '/main-menu': (context) => MainMenuScreen(),
           '/registro-vacuna': (context) => RegistroVacunaScreen(),
           '/visualizar-registros': (context) => VisualizarRegistrosScreen(),
           '/sync': (context) => SyncScreen(),
           '/change-password': (context) => ChangePasswordScreen(),
-          '/dashboard': (context) => DashboardScreen(),
         },
       ),
     );

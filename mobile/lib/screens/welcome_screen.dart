@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'professional_register_screen.dart'; // Mantener este import
+// CAMBIAR ESTA LÍNEA:
+// import 'register_screen.dart';
+// POR:
+import 'professional_register_screen.dart';
 import 'login_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -59,6 +62,9 @@ class WelcomeScreen extends StatelessWidget {
                       onPressed: () {
                         Navigator.push(
                           context,
+                          // CAMBIAR ESTA LÍNEA:
+                          // MaterialPageRoute(builder: (context) => RegisterScreen()),
+                          // POR:
                           MaterialPageRoute(builder: (context) => ProfessionalRegisterScreen()),
                         );
                       },
@@ -81,7 +87,7 @@ class WelcomeScreen extends StatelessWidget {
               
               // Información adicional
               Text(
-                'Sistema para el registro y seguimiento de vacunación',
+                'Sistema profesional para el registro y seguimiento de vacunación',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[500],

@@ -95,7 +95,18 @@ class AuthService {
   // Login de usuario (offline primero, luego online)
   Future<Map<String, dynamic>> loginUsuario(String username, String password) async {
     try {
-      // Primero intentar login online
+      // Primero intentar login offline
+      final offlineUser = await cacheService.getUsuarioByCredentials(username, password);
+      if (offlineUser != null) {
+        return {
+          'success': true,
+          'user': offlineUser,
+          'message': 'Login offline exitoso',
+          'isOffline': true,
+        };
+      }
+
+      // Si falla offline, intentar online
       final apiService = ApiService();
       final onlineResult = await apiService.login(username, password);
       
@@ -107,7 +118,7 @@ class AuthService {
           serverId: userData['id'],
           username: userData['username'],
           email: userData['email'],
-          password: password,
+          password: password, // Guardar contraseña para login offline
           telefono: userData['telefono'],
           isProfessional: userData['is_professional'],
           professionalLicense: userData['professional_license'],
@@ -128,38 +139,16 @@ class AuthService {
           'isOffline': false,
         };
       } else {
-        // Si falla online, intentar offline solo si hay conexión fallida
-        final offlineUser = await cacheService.getUsuarioByCredentials(username, password);
-        if (offlineUser != null) {
-          return {
-            'success': true,
-            'user': offlineUser,
-            'message': 'Login offline exitoso',
-            'isOffline': true,
-          };
-        } else {
-          return {
-            'success': false,
-            'error': onlineResult['error'] ?? 'Credenciales incorrectas',
-          };
-        }
-      }
-    } catch (e) {
-      // Si hay error de conexión, permitir login offline
-      final offlineUser = await cacheService.getUsuarioByCredentials(username, password);
-      if (offlineUser != null) {
-        return {
-          'success': true,
-          'user': offlineUser,
-          'message': 'Login offline (sin conexión)',
-          'isOffline': true,
-        };
-      } else {
         return {
           'success': false,
-          'error': 'Error de conexión y credenciales incorrectas',
+          'error': onlineResult['error'],
         };
       }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error en login: $e',
+      };
     }
   }
 
@@ -194,15 +183,6 @@ class AuthService {
     } catch (e) {
       print('Error cambiando password: $e');
       return false;
-    }
-  }
-
-  Future<List<Usuario>> getUsuarios() async {
-    try {
-      return await cacheService.getUsuarios();
-    } catch (e) {
-      print('Error obteniendo usuarios: $e');
-      return [];
     }
   }
 
