@@ -47,10 +47,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Variables de entorno por defecto
-ENV ENVIRONMENT=production
+ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
-# Exponer puerto
+# Exponer puerto (Render usa 10000 internamente)
 EXPOSE 8000
 
 # Comando de inicio

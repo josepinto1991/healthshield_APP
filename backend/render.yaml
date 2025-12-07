@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: healthshield-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: healthshield-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        value: Admin123!Seguro
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: DEBUG
+        value: "false"
+      - key: PORT
+        value: "8000"
+    healthCheckPath: /health
+    autoDeploy: true
+    numInstances: 1
+
+databases:
+  - name: healthshield-db
+    plan: free
+    databaseName: healthshield
+    user: healthshield_user
+    ipAllowList: []  # Solo servicios de Render
