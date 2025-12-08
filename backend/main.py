@@ -45,8 +45,8 @@ def create_default_admin(db: Session):
             logger.info("✅ Usuario admin ya existe")
             return
         
-        # Usar contraseña segura desde variables de entorno
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'Admin123!')
+        # Cambiar contraseña a "admin" (sin exclamación)
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin')
         
         admin_data = UsuarioCreate(
             username="admin",
@@ -61,7 +61,7 @@ def create_default_admin(db: Session):
         db_admin.is_verified = True
         db.commit()
         
-        logger.info(f"✅ Usuario admin creado exitosamente")
+        logger.info(f"✅ Usuario admin creado exitosamente (usuario: admin, contraseña: {admin_password})")
         
     except Exception as e:
         logger.error(f"⚠️ Error creando usuario admin: {e}")
