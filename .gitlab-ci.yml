@@ -9,36 +9,30 @@ sync-to-github:
   stage: sync
   image: alpine:latest
   before_script:
-    - apk add --no-cache git curl
-    - git config --global user.email "gitlab-ci@gitlab.com"
-    - git config --global user.name "GitLab CI Bot"
-    # Configurar autenticación con GitHub
-    - git remote remove github 2>/dev/null || true
+    - apk add --no-cache git
+    - git config --global user.email "gitlab-ci@example.com"
+    - git config --global user.name "GitLab CI"
   script:
-    # Añadir GitHub como remoto usando el token
+    # DEBUG: Mostrar información útil
+    - echo "=== INICIO SINCRONIZACIÓN ==="
+    - echo "Rama actual: $CI_COMMIT_REF_NAME"
+    - echo "Usuario GitHub: $GITHUB_USER"
+    
+    # Configurar GitHub como remoto (usando token)
+    - git remote remove github 2>/dev/null || true
     - git remote add github "https://$GITHUB_USER:$GITHUB_TOKEN@github.com/$GITHUB_USER/$GITHUB_REPO.git"
     
-    # Obtener los últimos cambios de todas las ramas
-    - git fetch --all
+    # Sincronizar la rama actual
+    - echo "Sincronizando rama: $CI_COMMIT_REF_NAME"
+    - git push github "$CI_COMMIT_REF_NAME" --force
     
-    # Empujar TODAS las ramas a GitHub
-    - |
-      for branch in $(git branch -r | grep -v '\->' | sed 's/origin\///'); do
-        git checkout -b "$branch" "origin/$branch" 2>/dev/null || git checkout "$branch"
-        git push github "$branch" --force
-        echo "Rama $branch sincronizada"
-      done
+    # Sincronizar tags si existen
+    - git push github --tags --force 2>/dev/null || echo "No hay tags para sincronizar"
     
-    # Empujar todas las etiquetas
-    - git push github --tags --force
-    
-    echo "✅ Sincronización completa con GitHub"
+    echo "✅ Sincronización completada con éxito"
   rules:
-    # Solo se ejecuta en pushes a ramas principales
     - if: '$CI_PIPELINE_SOURCE == "push"'
   only:
-    refs:
-      - main      # Si tu rama principal se llama main
-      - master    # Si tu rama principal se llama master
-      - develop   # Si quieres sincronizar develop también
-  retry: 2
+    - main
+    - master
+    - develop
