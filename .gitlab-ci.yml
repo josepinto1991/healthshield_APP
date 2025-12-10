@@ -1,26 +1,13 @@
 sync-to-github:
   image: alpine:latest
-  before_script:
-    - apk add --no-cache git curl
+  script:
+    - apk add --no-cache git
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
-  script:
-    - echo "=== VERIFICACIÓN DE TOKEN ==="
-    
-    # Verificar que el token funciona con GitHub API
-    - echo "Probando autenticación con GitHub..."
-    - curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user | grep '"login"' || echo "ERROR: Token inválido"
-    
-    - echo "=== SINCRONIZACIÓN ==="
-    - git fetch origin '+refs/heads/*:refs/heads/*'
-    - git checkout -B main origin/main
-    
-    # FORMATO ALTERNATIVO que funciona mejor
-    - git remote add github "https://x-access-token:$GITHUB_TOKEN@github.com/josepinto1991/healthshield_APP.git" || true
-    
-    - echo "Empujando cambios..."
-    - git push github main --force
-    
-    - echo "✅ Sincronización EXITOSA"
+    - cd /tmp
+    - git clone --mirror https://gitlab.com/KillerPR/healthshield_APP.git
+    - cd healthshield_APP.git
+    - git push --mirror https://josepinto1991:$GITHUB_TOKEN@github.com/josepinto1991/healthshield_APP.git
+    - echo "Sincronizacion completa"
   only:
     - main
