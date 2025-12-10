@@ -34,3 +34,4 @@ sin scripts de coneccion en el front(Flutter) y colocasion de db SQLite en front
 17. se debe poder modificar registros esten sincronizados o no para dosis futuras
 
 bd postgres esta fallando al crearse con dockercompose
+

@@ -8,6 +8,7 @@ class Usuario {
   bool isProfessional;
   String? professionalLicense;
   bool isVerified;
+  String role;
   bool isSynced;
   DateTime createdAt;
   DateTime? updatedAt;
@@ -22,6 +23,7 @@ class Usuario {
     this.isProfessional = false,
     this.professionalLicense,
     this.isVerified = false,
+    this.role = 'user',
     this.isSynced = false,
     required this.createdAt,
     this.updatedAt,
@@ -38,6 +40,7 @@ class Usuario {
       isProfessional: json['is_professional'] == 1 || json['is_professional'] == true,
       professionalLicense: json['professional_license'],
       isVerified: json['is_verified'] == 1 || json['is_verified'] == true,
+      role: json['role'] ?? 'user',
       isSynced: json['is_synced'] == 1 || json['is_synced'] == true,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
@@ -55,6 +58,7 @@ class Usuario {
       'is_professional': isProfessional ? 1 : 0,
       'professional_license': professionalLicense,
       'is_verified': isVerified ? 1 : 0,
+      'role': role,
       'is_synced': isSynced ? 1 : 0,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
@@ -69,6 +73,7 @@ class Usuario {
       'telefono': telefono,
       'is_professional': isProfessional,
       'professional_license': professionalLicense,
+      'role': role,
       'local_id': id,
     };
   }
@@ -80,22 +85,24 @@ class Usuario {
     };
   }
 
-  // Método para crear un usuario vacío
   static Usuario empty() {
     return Usuario(
       username: '',
       email: '',
       password: '',
+      role: 'user',
       createdAt: DateTime.now(),
     );
   }
 
-  // Método para verificar si el usuario está vacío
   bool get isEmpty {
     return username.isEmpty || email.isEmpty || password.isEmpty;
   }
 
-  // Método para copiar el usuario con nuevos valores
+  bool get isAdmin => role == 'admin';
+  bool get isProfessionalUser => role == 'professional' || isProfessional;
+  bool get isUser => role == 'user';
+
   Usuario copyWith({
     int? id,
     int? serverId,
@@ -106,6 +113,7 @@ class Usuario {
     bool? isProfessional,
     String? professionalLicense,
     bool? isVerified,
+    String? role,
     bool? isSynced,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -120,6 +128,7 @@ class Usuario {
       isProfessional: isProfessional ?? this.isProfessional,
       professionalLicense: professionalLicense ?? this.professionalLicense,
       isVerified: isVerified ?? this.isVerified,
+      role: role ?? this.role,
       isSynced: isSynced ?? this.isSynced,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

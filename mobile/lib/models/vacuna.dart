@@ -1,11 +1,10 @@
 class Vacuna {
   int? id;
   int? serverId;
-  String nombrePaciente;
-  String tipoPaciente;
-  String cedulaPaciente;
-  String tipoVacuna;
-  String fechaVacunacion;
+  int? pacienteId;
+  int? pacienteServerId;
+  String nombreVacuna;
+  String fechaAplicacion;
   String? lote;
   String? proximaDosis;
   int? usuarioId;
@@ -13,37 +12,42 @@ class Vacuna {
   DateTime? createdAt;
   DateTime? updatedAt;
 
+  String? nombrePaciente;
+  String? cedulaPaciente;
+
   Vacuna({
     this.id,
     this.serverId,
-    required this.nombrePaciente,
-    required this.tipoPaciente,
-    required this.cedulaPaciente,
-    required this.tipoVacuna,
-    required this.fechaVacunacion,
+    this.pacienteId,
+    this.pacienteServerId,
+    required this.nombreVacuna,
+    required this.fechaAplicacion,
     this.lote,
     this.proximaDosis,
     this.usuarioId,
     this.isSynced = false,
     this.createdAt,
     this.updatedAt,
+    this.nombrePaciente,
+    this.cedulaPaciente,
   });
 
   factory Vacuna.fromJson(Map<String, dynamic> json) {
     return Vacuna(
       id: json['id'],
       serverId: json['server_id'],
-      nombrePaciente: json['nombre_paciente'],
-      tipoPaciente: json['tipo_paciente'],
-      cedulaPaciente: json['cedula_paciente'] ?? '',
-      tipoVacuna: json['tipo_vacuna'],
-      fechaVacunacion: json['fecha_vacunacion'],
+      pacienteId: json['paciente_id'],
+      pacienteServerId: json['paciente_server_id'],
+      nombreVacuna: json['nombre_vacuna'],
+      fechaAplicacion: json['fecha_aplicacion'],
       lote: json['lote'],
       proximaDosis: json['proxima_dosis'],
       usuarioId: json['usuario_id'],
-      isSynced: json['is_synced'] == 1,
+      isSynced: json['is_synced'] == 1 || json['is_synced'] == true,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+      nombrePaciente: json['nombre_paciente'],
+      cedulaPaciente: json['cedula_paciente'],
     );
   }
 
@@ -51,38 +55,72 @@ class Vacuna {
     return {
       'id': id,
       'server_id': serverId,
-      'nombre_paciente': nombrePaciente,
-      'tipo_paciente': tipoPaciente,
-      'cedula_paciente': cedulaPaciente,
-      'tipo_vacuna': tipoVacuna,
-      'fecha_vacunacion': fechaVacunacion,
+      'paciente_id': pacienteId,
+      'paciente_server_id': pacienteServerId,
+      'nombre_vacuna': nombreVacuna,
+      'fecha_aplicacion': fechaAplicacion,
       'lote': lote,
       'proxima_dosis': proximaDosis,
       'usuario_id': usuarioId,
       'is_synced': isSynced ? 1 : 0,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
+      'nombre_paciente': nombrePaciente,
+      'cedula_paciente': cedulaPaciente,
     };
   }
 
   Map<String, dynamic> toServerJson() {
     return {
-      'nombre_paciente': nombrePaciente,
-      'tipo_paciente': tipoPaciente,
-      'cedula_paciente': cedulaPaciente,
-      'tipo_vacuna': tipoVacuna,
-      'fecha_vacunacion': fechaVacunacion,
+      'paciente_id': pacienteServerId ?? pacienteId,
+      'nombre_vacuna': nombreVacuna,
+      'fecha_aplicacion': fechaAplicacion,
       'lote': lote,
       'proxima_dosis': proximaDosis,
       'local_id': id,
     };
   }
 
-  String get fechaFormateada {
-    final parts = fechaVacunacion.split('-');
-    if (parts.length == 3) {
-      return '${parts[2]}/${parts[1]}/${parts[0]}';
+  String get fechaAplicacionFormateada {
+    try {
+      final parts = fechaAplicacion.split('-');
+      if (parts.length == 3) {
+        return '${parts[2]}/${parts[1]}/${parts[0]}';
+      }
+      return fechaAplicacion;
+    } catch (e) {
+      return fechaAplicacion;
     }
-    return fechaVacunacion;
+  }
+
+  String? get proximaDosisFormateada {
+    if (proximaDosis == null) return null;
+    try {
+      final parts = proximaDosis!.split('-');
+      if (parts.length == 3) {
+        return '${parts[2]}/${parts[1]}/${parts[0]}';
+      }
+      return proximaDosis;
+    } catch (e) {
+      return proximaDosis;
+    }
+  }
+
+  bool get proximaDosisPasada {
+    if (proximaDosis == null) return false;
+    try {
+      final parts = proximaDosis!.split('-');
+      if (parts.length == 3) {
+        final fechaProxima = DateTime(
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+          int.parse(parts[2]),
+        );
+        return DateTime.now().isAfter(fechaProxima);
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
 }

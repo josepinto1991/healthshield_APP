@@ -6,12 +6,17 @@ import 'registro_vacuna_screen.dart';
 import 'visualizar_registros_screen.dart';
 import 'sync_screen.dart';
 import 'change_password_screen.dart';
+import 'admin_dashboard_screen.dart';
 
 class MainMenuScreen extends StatelessWidget {
   Future<void> _logout(BuildContext context) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     await authService.logout();
-    Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
+    Navigator.pushNamedAndRemoveUntil(
+      context, 
+      '/welcome', 
+      (route) => false
+    );
   }
 
   Future<void> _launchURL(String url) async {
@@ -24,6 +29,10 @@ class MainMenuScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final currentUser = authService.currentUser;
+    final isAdmin = currentUser?.isAdmin ?? false;
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -35,7 +44,14 @@ class MainMenuScreen extends StatelessWidget {
           ),
         ),
         actions: [
-          // Botón de sincronización
+          if (isAdmin)
+            IconButton(
+              icon: Icon(Icons.admin_panel_settings, color: Colors.red),
+              onPressed: () {
+                Navigator.pushNamed(context, '/admin-dashboard');
+              },
+              tooltip: 'Panel Administrativo',
+            ),
           IconButton(
             icon: Icon(Icons.sync),
             onPressed: () {
@@ -43,7 +59,6 @@ class MainMenuScreen extends StatelessWidget {
             },
             tooltip: 'Sincronizar datos',
           ),
-          // Botón de cambio de contraseña
           IconButton(
             icon: Icon(Icons.lock),
             onPressed: () {
@@ -51,7 +66,6 @@ class MainMenuScreen extends StatelessWidget {
             },
             tooltip: 'Cambiar contraseña',
           ),
-          // Botón de logout
           IconButton(
             icon: Icon(Icons.logout),
             onPressed: () => _logout(context),
@@ -64,13 +78,84 @@ class MainMenuScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Información del usuario
+            if (currentUser != null)
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: isAdmin ? Colors.red : Colors.blue,
+                        child: Icon(
+                          isAdmin ? Icons.admin_panel_settings : Icons.person,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              currentUser.username,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Chip(
+                                  label: Text(
+                                    isAdmin ? 'ADMIN' : 'USUARIO',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  backgroundColor: isAdmin ? Colors.red : Colors.blue,
+                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                ),
+                                if (currentUser.isProfessional)
+                                  Padding(
+                                    padding: EdgeInsets.only(left: 8),
+                                    child: Chip(
+                                      label: Text(
+                                        'PROFESIONAL',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      backgroundColor: Colors.green,
+                                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            
+            SizedBox(height: isAdmin ? 16 : 24),
+            
             // Botones principales
             Row(
               children: [
                 Expanded(
                   child: _buildMenuButton(
                     icon: Icons.add_circle,
-                    title: 'Realizar Registro',
+                    title: 'Registrar Vacuna',
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pushNamed(context, '/registro-vacuna');
@@ -81,7 +166,7 @@ class MainMenuScreen extends StatelessWidget {
                 Expanded(
                   child: _buildMenuButton(
                     icon: Icons.visibility,
-                    title: 'Visualizar Registro',
+                    title: 'Ver Registros',
                     color: Colors.green,
                     onTap: () {
                       Navigator.pushNamed(context, '/visualizar-registros');
@@ -106,7 +191,7 @@ class MainMenuScreen extends StatelessWidget {
             
             // Información General
             Text(
-              'Información General',
+              'Recursos de Información',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             
@@ -168,50 +253,7 @@ class MainMenuScreen extends StatelessWidget {
             
             SizedBox(height: 16),
             
-            // Botones de acción rápida
-            Row(
-              children: [
-                Expanded(
-                  child: _buildQuickActionButton(
-                    icon: Icons.person,
-                    title: 'Mi Perfil',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Vista de perfil - Próximamente')),
-                      );
-                    },
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: _buildQuickActionButton(
-                    icon: Icons.settings,
-                    title: 'Configuración',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Configuración - Próximamente')),
-                      );
-                    },
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: _buildQuickActionButton(
-                    icon: Icons.help,
-                    title: 'Ayuda',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Centro de ayuda - Próximamente')),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-            
-            SizedBox(height: 16),
-            
-            // Botón proceder
+            // Botón rápido para registrar vacuna
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -219,14 +261,15 @@ class MainMenuScreen extends StatelessWidget {
                 onPressed: () {
                   Navigator.pushNamed(context, '/registro-vacuna');
                 },
-                icon: Icon(Icons.arrow_forward),
-                label: Text('Proceder a Registro de Vacunas'),
+                icon: Icon(Icons.add, size: 20),
+                label: Text('Nuevo Registro de Vacuna'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  elevation: 2,
                 ),
               ),
             ),
@@ -272,38 +315,6 @@ class MainMenuScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickActionButton({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 24, color: Colors.blue),
-              SizedBox(height: 4),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildInfoCard({
     required String title,
     required String subtitle,
@@ -317,8 +328,8 @@ class MainMenuScreen extends StatelessWidget {
       child: ListTile(
         leading: Icon(icon, color: color),
         title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
-        trailing: Icon(Icons.open_in_new, size: 16),
+        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+        trailing: Icon(Icons.open_in_new, size: 16, color: Colors.grey),
         onTap: onTap,
       ),
     );

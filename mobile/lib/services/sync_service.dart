@@ -1,8 +1,8 @@
 // lib/services/sync_service.dart
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/vacuna.dart';
-import 'vacuna_service.dart';
-import 'api_service.dart';
+import './vacuna_service.dart';
+import './api_service.dart'; // Importación corregida
 
 class SyncService {
   final VacunaService vacunaService;
@@ -68,51 +68,6 @@ class SyncService {
     }
   }
 
-  // Descargar vacunas actualizadas del servidor
-  Future<Map<String, dynamic>> downloadLatestVacunas() async {
-    if (!await hasInternetConnection()) {
-      return {
-        'success': false,
-        'message': 'No hay conexión a internet',
-        'downloaded': 0,
-      };
-    }
-
-    try {
-      final result = await apiService.getVacunasFromServer();
-      
-      if (result['success']) {
-        final List<dynamic> serverVacunas = result['data'];
-        int downloadedCount = 0;
-
-        for (final serverVacuna in serverVacunas) {
-          await vacunaService.saveVacunaFromServer(
-            Vacuna.fromJson(serverVacuna)
-          );
-          downloadedCount++;
-        }
-
-        return {
-          'success': true,
-          'message': 'Descargadas $downloadedCount vacunas',
-          'downloaded': downloadedCount,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': result['error'],
-          'downloaded': 0,
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Error descargando vacunas: $e',
-        'downloaded': 0,
-      };
-    }
-  }
-
   // Sincronización completa
   Future<Map<String, dynamic>> fullSync() async {
     if (!await hasInternetConnection()) {
@@ -124,32 +79,19 @@ class SyncService {
 
     try {
       print('🔄 Iniciando sincronización completa...');
-
-      // 1. Subir vacunas pendientes
+      
       final uploadResult = await syncPendingVacunas();
       
-      // 2. Descargar vacunas actualizadas
-      final downloadResult = await downloadLatestVacunas();
-
       return {
-        'success': uploadResult['success'] && downloadResult['success'],
-        'message': '${uploadResult['message']} | ${downloadResult['message']}',
+        'success': uploadResult['success'],
+        'message': uploadResult['message'],
         'uploaded': uploadResult['synced'],
-        'downloaded': downloadResult['downloaded'],
       };
     } catch (e) {
       return {
         'success': false,
         'message': 'Error en sincronización completa: $e',
       };
-    }
-  }
-
-  // Sincronización automática al iniciar la app
-  Future<void> autoSync() async {
-    if (await hasInternetConnection()) {
-      print('🌐 Conexión detectada - Sincronizando automáticamente...');
-      await fullSync();
     }
   }
 

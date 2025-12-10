@@ -6,6 +6,10 @@ import 'database_helper.dart';
 class CacheService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
+  Future<Database> getDatabase() async {
+    return await _dbHelper.database;
+  }
+
   // ========== USUARIOS ==========
   Future<int> insertUsuario(Usuario usuario) async {
     final db = await _dbHelper.database;
@@ -31,6 +35,16 @@ class CacheService {
   Future<Usuario?> getUsuarioActual() async {
     final db = await _dbHelper.database;
     final results = await db.query('usuarios', limit: 1);
+    return results.isNotEmpty ? Usuario.fromJson(results.first) : null;
+  }
+
+  Future<Usuario?> getUsuarioById(int usuarioId) async {
+    final db = await _dbHelper.database;
+    final results = await db.query(
+      'usuarios',
+      where: 'id = ?',
+      whereArgs: [usuarioId],
+    );
     return results.isNotEmpty ? Usuario.fromJson(results.first) : null;
   }
 
@@ -101,27 +115,14 @@ class CacheService {
     );
   }
 
-  Future<void> close() async {
+  Future<void> clearSensitiveData() async {
+    final db = await _dbHelper.database;
+    // Aquí puedes limpiar datos sensibles si es necesario
+    // Por ahora solo cerramos la conexión
     await _dbHelper.close();
   }
 
-// Agregar estos métodos a la clase CacheService:
-
-Future<Usuario?> getUsuarioById(int usuarioId) async {
-  final db = await _dbHelper.database;
-  final results = await db.query(
-    'usuarios',
-    where: 'id = ?',
-    whereArgs: [usuarioId],
-  );
-  return results.isNotEmpty ? Usuario.fromJson(results.first) : null;
-}
-
-Future<void> clearSensitiveData() async {
-  final db = await _dbHelper.database;
-  // Aquí puedes limpiar datos sensibles si es necesario
-  // Por ahora solo cerramos la conexión
-  await _dbHelper.close();
-}
-
+  Future<void> close() async {
+    await _dbHelper.close();
+  }
 }

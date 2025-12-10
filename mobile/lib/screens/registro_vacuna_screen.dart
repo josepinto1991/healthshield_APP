@@ -58,13 +58,12 @@ class _RegistroVacunaScreenState extends State<RegistroVacunaScreen> {
       final vacunaService = Provider.of<VacunaService>(context, listen: false);
       
       final nuevaVacuna = Vacuna(
-        nombrePaciente: _nombreController.text,
-        tipoPaciente: _tipoPaciente,
-        cedulaPaciente: _cedulaController.text,
-        tipoVacuna: _tipoVacunaController.text,
-        fechaVacunacion: "${_fechaVacunacion.year}-${_fechaVacunacion.month.toString().padLeft(2, '0')}-${_fechaVacunacion.day.toString().padLeft(2, '0')}",
+        nombreVacuna: _tipoVacunaController.text, 
+        fechaAplicacion: "${_fechaVacunacion.year}-${_fechaVacunacion.month.toString().padLeft(2, '0')}-${_fechaVacunacion.day.toString().padLeft(2, '0')}",
         lote: _loteController.text.isEmpty ? null : _loteController.text,
         proximaDosis: _proximaDosisController.text.isEmpty ? null : _proximaDosisController.text,
+        nombrePaciente: _nombreController.text,
+        cedulaPaciente: _cedulaController.text.isEmpty ? null : _cedulaController.text,
         createdAt: DateTime.now(),
       );
 

@@ -2,9 +2,17 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/usuario.dart';
 import '../models/vacuna.dart';
+import '../models/paciente.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.100:5001/api';
+  // Para desarrollo con emulador Android (Android Studio)
+  static const String baseUrl = 'http://10.0.2.2:8000/api';
+  
+  // Para desarrollo con dispositivo físico en la misma red:
+  // static const String baseUrl = 'http://192.168.1.100:8000/api';
+  
+  // Para producción (cambiar cuando despliegues):
+  // static const String baseUrl = 'https://tu-api.com/api';
 
   final Map<String, String> headers = {
     'Content-Type': 'application/json',
@@ -20,6 +28,119 @@ class ApiService {
     } else {
       headers.remove('Authorization');
     }
+  }
+  
+  // ========== PACIENTES ==========
+  Future<Map<String, dynamic>> crearPaciente(Paciente paciente) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/pacientes'),
+        headers: headers,
+        body: json.encode(paciente.toServerJson()),
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 201) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error creando paciente: ${response.statusCode} - ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getPacientes() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/pacientes'),
+        headers: headers,
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error obteniendo pacientes: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  // AÑADIR: Método para buscar pacientes (usado en api_service anterior)
+  Future<Map<String, dynamic>> buscarPacientes(String query) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/pacientes/buscar?q=$query'),
+        headers: headers,
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error buscando pacientes: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  // AÑADIR: Método para obtener paciente por cédula (usado en api_service anterior)
+  Future<Map<String, dynamic>> getPacienteByCedula(String cedula) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/pacientes/cedula/$cedula'),
+        headers: headers,
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Paciente no encontrado',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  // AÑADIR: Método para obtener pacientes del servidor (alias de getPacientes)
+  Future<Map<String, dynamic>> getPacientesFromServer() async {
+    return await getPacientes();
   }
 
   // ========== VERIFICACIÓN DE PROFESIONALES ==========
@@ -130,6 +251,7 @@ class ApiService {
     }
   }
 
+  // AÑADIR: Método para registro normal (usado en api_service anterior)
   Future<Map<String, dynamic>> register(Usuario usuario) async {
     try {
       final response = await http.post(
@@ -161,6 +283,7 @@ class ApiService {
     }
   }
 
+  // AÑADIR: Método para cambiar contraseña (usado en api_service anterior)
   Future<Map<String, dynamic>> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -223,7 +346,115 @@ class ApiService {
     }
   }
 
+
   // ========== VACUNAS ==========
+  Future<Map<String, dynamic>> crearVacuna(Vacuna vacuna) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/vacunas'),
+        headers: headers,
+        body: json.encode(vacuna.toServerJson()),
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 201) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error creando vacuna: ${response.statusCode} - ${response.body}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> getVacunas() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/vacunas'),
+        headers: headers,
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error obteniendo vacunas: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  // AÑADIR: Método para obtener vacunas por paciente ID
+  Future<Map<String, dynamic>> getVacunasByPaciente(int pacienteId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/pacientes/$pacienteId/vacunas'),
+        headers: headers,
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error obteniendo vacunas del paciente: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  // Este método ya lo tienes, pero lo mantengo
+  Future<Map<String, dynamic>> getVacunasFromServer() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/vacunas'),
+        headers: headers,
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error obteniendo vacunas: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
   Future<Map<String, dynamic>> syncVacuna(Vacuna vacuna) async {
     try {
       final response = await http.post(
@@ -251,33 +482,8 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> getVacunasFromServer() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/vacunas'),
-        headers: headers,
-      ).timeout(Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'data': json.decode(response.body),
-        };
-      } else {
-        return {
-          'success': false,
-          'error': 'Error obteniendo vacunas: ${response.statusCode}',
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error de conexión: $e',
-      };
-    }
-  }
-
   // ========== SINCRONIZACIÓN MASIVA ==========
+  // AÑADIR: Método para sincronización masiva (usado en api_service anterior)
   Future<Map<String, dynamic>> bulkSync(List<Vacuna> vacunas) async {
     try {
       final vacunasData = vacunas.map((v) => v.toServerJson()).toList();
@@ -319,6 +525,38 @@ class ApiService {
         return {
           'success': true,
           'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Error obteniendo actualizaciones: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Error de conexión: $e',
+      };
+    }
+  }
+
+  // AÑADIR: Método para obtener actualizaciones con estructura específica
+  Future<Map<String, dynamic>> getUpdatesStructured(String lastSync) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/sync/updates-structured?last_sync=$lastSync'),
+        headers: headers,
+      ).timeout(Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': {
+            'usuarios': data['usuarios'] ?? [],
+            'vacunas': data['vacunas'] ?? [],
+            'pacientes': data['pacientes'] ?? [],
+          },
         };
       } else {
         return {

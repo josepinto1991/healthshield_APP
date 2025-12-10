@@ -52,9 +52,9 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
     setState(() {
       _vacunasFiltradas = _vacunas.where((vacuna) {
         if (_tipoBusqueda == 'cedula') {
-          return vacuna.cedulaPaciente.toLowerCase().contains(query.toLowerCase());
+          return vacuna.cedulaPaciente?.toLowerCase().contains(query.toLowerCase()) ?? false;
         } else {
-          return vacuna.nombrePaciente.toLowerCase().contains(query.toLowerCase());
+          return vacuna.nombrePaciente?.toLowerCase().contains(query.toLowerCase()) ?? false;
         }
       }).toList();
     });
@@ -72,14 +72,14 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:  Text(
-                    'HealthShield',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-              ),
+        title: Text(
+          'HealthShield',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue,
           ),
+        ),
         actions: [
           IconButton(
             icon: Icon(Icons.logout),
@@ -101,7 +101,7 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                 Expanded(
                   child: TextButton(
                     onPressed: () {
-                      Navigator.pushReplacementNamed(context, '/registro');
+                      Navigator.pushReplacementNamed(context, '/registro-vacuna');
                     },
                     child: Text(
                       'Realizar Registro',
@@ -274,31 +274,31 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                               margin: EdgeInsets.symmetric(vertical: 4),
                               child: ListTile(
                                 leading: Icon(
-                                  vacuna.tipoPaciente == 'niño' 
+                                  vacuna.nombrePaciente?.contains('niño') ?? false 
                                       ? Icons.child_care 
                                       : Icons.person,
                                   color: Colors.blue,
                                 ),
-                                title: Text(vacuna.nombrePaciente),
+                                title: Text(vacuna.nombrePaciente ?? 'Sin nombre'),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Vacuna: ${vacuna.tipoVacuna}'),
-                                    Text('Fecha: ${vacuna.fechaFormateada}'),
-                                    if (vacuna.cedulaPaciente.isNotEmpty)
+                                    Text('Vacuna: ${vacuna.nombreVacuna}'),
+                                    Text('Fecha: ${vacuna.fechaAplicacionFormateada}'),
+                                    if (vacuna.cedulaPaciente != null && vacuna.cedulaPaciente!.isNotEmpty)
                                       Text('Cédula: ${vacuna.cedulaPaciente}'),
                                     if (vacuna.lote != null)
                                       Text('Lote: ${vacuna.lote}'),
                                     if (vacuna.proximaDosis != null)
-                                      Text('Próxima dosis: ${vacuna.proximaDosis}'),
+                                      Text('Próxima dosis: ${vacuna.proximaDosisFormateada}'),
                                   ],
                                 ),
                                 trailing: Chip(
                                   label: Text(
-                                    vacuna.tipoPaciente,
+                                    vacuna.nombrePaciente?.contains('niño') ?? false ? 'NIÑO' : 'ADULTO',
                                     style: TextStyle(color: Colors.white, fontSize: 12),
                                   ),
-                                  backgroundColor: vacuna.tipoPaciente == 'niño' 
+                                  backgroundColor: vacuna.nombrePaciente?.contains('niño') ?? false 
                                       ? Colors.orange 
                                       : Colors.green,
                                 ),

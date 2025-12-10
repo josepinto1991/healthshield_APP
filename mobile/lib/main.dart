@@ -1,66 +1,82 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; 
+import 'package:provider/provider.dart';
 import 'package:healthshield/services/auth_service.dart';
 import 'package:healthshield/services/vacuna_service.dart';
-import 'package:healthshield/services/api_service.dart';
+import 'package:healthshield/services/paciente_service.dart';
 import 'package:healthshield/services/sync_service.dart';
-import 'package:healthshield/services/bidirectional_sync_service.dart';
+import 'package:healthshield/db_sqlite/database_helper.dart';
 import 'package:healthshield/db_sqlite/cache_service.dart';
 import 'package:healthshield/screens/welcome_screen.dart';
 import 'package:healthshield/screens/login_screen.dart';
-// CAMBIAR ESTA LÍNEA:
-// import 'package:healthshield/screens/register_screen.dart';
-// POR:
 import 'package:healthshield/screens/professional_register_screen.dart';
 import 'package:healthshield/screens/main_menu_screen.dart';
 import 'package:healthshield/screens/registro_vacuna_screen.dart';
 import 'package:healthshield/screens/visualizar_registros_screen.dart';
 import 'package:healthshield/screens/sync_screen.dart';
 import 'package:healthshield/screens/change_password_screen.dart';
+import 'package:healthshield/screens/admin_dashboard_screen.dart';
+import 'package:healthshield/screens/admin_usuarios_screen.dart';
+import 'package:healthshield/screens/gestion_pacientes_screen.dart';
+import 'package:healthshield/utils/route_guard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // Inicializar servicios de base de datos SQLite
+    print('🚀 Inicializando aplicación HealthShield...');
+    
+    // Inicializar DatabaseHelper primero
+    await DatabaseHelper.instance.database;
+    print('✅ Base de datos inicializada');
+    
+    // Inicializar servicios
     final cacheService = CacheService();
     
-    // Servicios de aplicación
     final authService = AuthService(cacheService: cacheService);
     await authService.init();
+    print('✅ AuthService inicializado');
+    
+    final pacienteService = PacienteService();
+    print('✅ PacienteService inicializado');
     
     final vacunaService = VacunaService();
     await vacunaService.init();
-
-    // Servicios de API y sincronización
-    final apiService = ApiService();
-    final syncService = SyncService(
-      vacunaService: vacunaService,
-      apiService: apiService,
-    );
-
-    final bidirectionalSyncService = BidirectionalSyncService(
-      cacheService: cacheService,
-      apiService: apiService,
-    );
-
+    print('✅ VacunaService inicializado');
+    
     runApp(
       MyApp(
         authService: authService,
+        pacienteService: pacienteService,
         vacunaService: vacunaService,
-        apiService: apiService,
-        syncService: syncService,
-        bidirectionalSyncService: bidirectionalSyncService,
         cacheService: cacheService,
       ),
     );
   } catch (e) {
-    print('❌ Error inicializando app: $e');
+    print('❌ Error crítico inicializando app: $e');
     runApp(
       MaterialApp(
         home: Scaffold(
           body: Center(
-            child: Text('Error inicializando aplicación: $e'),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error, size: 64, color: Colors.red),
+                SizedBox(height: 20),
+                Text(
+                  'Error inicializando aplicación',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    e.toString(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -70,18 +86,14 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   final AuthService authService;
+  final PacienteService pacienteService;
   final VacunaService vacunaService;
-  final ApiService apiService;
-  final SyncService syncService;
-  final BidirectionalSyncService bidirectionalSyncService;
   final CacheService cacheService;
 
   MyApp({
     required this.authService,
+    required this.pacienteService,
     required this.vacunaService,
-    required this.apiService,
-    required this.syncService,
-    required this.bidirectionalSyncService,
     required this.cacheService,
   });
 
@@ -90,10 +102,8 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<AuthService>.value(value: authService),
+        Provider<PacienteService>.value(value: pacienteService),
         Provider<VacunaService>.value(value: vacunaService),
-        Provider<ApiService>.value(value: apiService),
-        Provider<SyncService>.value(value: syncService),
-        Provider<BidirectionalSyncService>.value(value: bidirectionalSyncService),
         Provider<CacheService>.value(value: cacheService),
       ],
       child: MaterialApp(
@@ -102,22 +112,27 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
           fontFamily: 'Roboto',
+          appBarTheme: AppBarTheme(
+            elevation: 2,
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.blue,
+            centerTitle: true,
+          ),
         ),
-        home: WelcomeScreen(),
+        initialRoute: '/welcome',
         debugShowCheckedModeBanner: false,
         routes: {
           '/welcome': (context) => WelcomeScreen(),
           '/login': (context) => LoginScreen(),
-          // CAMBIAR ESTA RUTA:
-          // '/register': (context) => RegisterScreen(),
-          // POR:
           '/register': (context) => ProfessionalRegisterScreen(),
-          '/register-professional': (context) => ProfessionalRegisterScreen(),
-          '/main-menu': (context) => MainMenuScreen(),
-          '/registro-vacuna': (context) => RegistroVacunaScreen(),
-          '/visualizar-registros': (context) => VisualizarRegistrosScreen(),
-          '/sync': (context) => SyncScreen(),
-          '/change-password': (context) => ChangePasswordScreen(),
+          '/main-menu': (context) => RouteGuard.authenticatedOnly(MainMenuScreen()),
+          '/registro-vacuna': (context) => RouteGuard.authenticatedOnly(RegistroVacunaScreen()),
+          '/visualizar-registros': (context) => RouteGuard.authenticatedOnly(VisualizarRegistrosScreen()),
+          '/sync': (context) => RouteGuard.authenticatedOnly(SyncScreen()),
+          '/change-password': (context) => RouteGuard.authenticatedOnly(ChangePasswordScreen()),
+          '/admin-dashboard': (context) => RouteGuard.adminOnly(AdminDashboardScreen()),
+          '/admin-usuarios': (context) => RouteGuard.adminOnly(AdminUsuariosScreen()),
+          '/gestion-pacientes': (context) => RouteGuard.authenticatedOnly(GestionPacientesScreen()),
         },
       ),
     );

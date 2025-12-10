@@ -79,13 +79,6 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
   Future<void> _completeRegistration() async {
     if (!_formKey.currentState!.validate()) return;
     
-    if (!_isVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Debes verificar tu cédula primero')),
-      );
-      return;
-    }
-
     if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Las contraseñas no coinciden')),
@@ -98,6 +91,7 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
     });
 
     final authService = Provider.of<AuthService>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context, listen: false);
 
     final nuevoUsuario = Usuario(
       username: _usernameController.text,
@@ -105,15 +99,19 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
       password: _passwordController.text,
       telefono: _telefonoController.text.isEmpty ? null : _telefonoController.text,
       isProfessional: true,
-      professionalLicense: _verificationResult?['professional_license'],
-      isVerified: true,
-      isSynced: false, // Se sincronizará con el servidor
+      professionalLicense: _verificationResult?['professional_license']?.toString(),
+      isVerified: false, // Inicialmente no verificado en modo offline
+      isSynced: false, // Requerirá sincronización
       createdAt: DateTime.now(),
     );
 
+    // Intentar registro con verificación si está disponible
+    final cedulaVerificacion = _cedulaController.text.trim();
+    final hasVerification = cedulaVerificacion.isNotEmpty && _isVerified;
+
     final result = await authService.registrarUsuarioProfesional(
       usuario: nuevoUsuario,
-      cedulaVerificacion: _cedulaController.text,
+      cedulaVerificacion: hasVerification ? cedulaVerificacion : '',
     );
 
     setState(() {
@@ -121,14 +119,54 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
     });
 
     if (result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ ${result['message']}'),
-          backgroundColor: Colors.green,
+      final bool isOffline = result['isOffline'] ?? true;
+      final bool requiresSync = result['requiresSync'] ?? false;
+      
+      String message = result['message'] ?? 'Registro exitoso';
+      
+      if (isOffline) {
+        message += '\nTrabajando en modo offline.';
+        if (requiresSync) {
+          message += '\nLos datos se sincronizarán automáticamente cuando haya conexión.';
+        }
+      }
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(isOffline ? '📴 Registro Offline' : '✅ Registro Exitoso'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              SizedBox(height: 16),
+              if (isOffline && requiresSync)
+                Row(
+                  children: [
+                    Icon(Icons.sync, color: Colors.orange, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Recuerda conectarte a internet para completar la verificación profesional.',
+                        style: TextStyle(fontSize: 12, color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushReplacementNamed(context, '/login');
+              },
+              child: Text('Continuar'),
+            ),
+          ],
         ),
       );
-      
-      Navigator.pushReplacementNamed(context, '/login');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -31,7 +31,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       });
 
       final authService = Provider.of<AuthService>(context, listen: false);
-      final currentUser = await authService.getUsuarioActual();
+      // CORREGIR: Usa currentUser en lugar de getUsuarioActual()
+      final currentUser = authService.currentUser;
 
       if (currentUser != null) {
         // Verificar contraseña actual
@@ -40,7 +41,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           _currentPasswordController.text
         );
 
-        if (verifyUser != null) {
+        if (verifyUser['success']) {
           // Actualizar contraseña
           final success = await authService.actualizarUsuario(
             currentUser.copyWith(password: _newPasswordController.text)
