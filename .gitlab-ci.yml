@@ -2,7 +2,7 @@ stages:
   - sync
 
 variables:
-  GITHUB_USER: "josepint1991"
+  GITHUB_USER: "josepinto1991"
   GITHUB_REPO: "healthshield_APP"
 
 sync-to-github:
