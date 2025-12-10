@@ -5,11 +5,14 @@ sync-to-github:
     - git config --global user.email "ci@gitlab.com"
     - git config --global user.name "GitLab CI"
   script:
-    - echo "=== SINCRONIZACIÓN GITLAB → GITHUB ==="
-    - git fetch origin '+refs/heads/*:refs/heads/*'
-    - git checkout main
-    - git remote add github https://josepinto1991:$GITHUB_TOKEN@github.com/josepinto1991/healthshield_APP.git || true
+    - echo "=== SINCRONIZACIÓN INICIADA ==="
+    
+    # Configurar GitHub con formato CLASSIC token
+    - git remote add github "https://josepinto1991:$GITHUB_TOKEN@github.com/josepinto1991/healthshield_APP.git" || true
+    
+    # Forzar sincronización
     - git push github main --force
-    - echo "✅ Sincronización completada con éxito"
+    
+    - echo "✅ SINCRONIZACIÓN COMPLETADA"
   only:
     - main
