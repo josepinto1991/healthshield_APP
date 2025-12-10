@@ -1,8 +1,7 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 from models import Usuario, Paciente, Vacuna, UsuarioCreate, PacienteCreate, VacunaCreate
 from database import hash_password, verify_password
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 class UsuarioRepository:
     @staticmethod
@@ -72,6 +71,20 @@ class PacienteRepository:
         db.commit()
         db.refresh(db_paciente)
         return db_paciente
+    
+    @staticmethod
+    def update(db: Session, paciente_id: int, paciente_update: Dict[str, Any]) -> Optional[Paciente]:
+        paciente = PacienteRepository.get_by_id(db, paciente_id)
+        if not paciente:
+            return None
+        
+        for key, value in paciente_update.items():
+            if value is not None and hasattr(paciente, key):
+                setattr(paciente, key, value)
+        
+        db.commit()
+        db.refresh(paciente)
+        return paciente
 
 class VacunaRepository:
     @staticmethod
@@ -88,7 +101,8 @@ class VacunaRepository:
     
     @staticmethod
     def create(db: Session, vacuna: VacunaCreate) -> Vacuna:
-        # Verificar que el paciente existe
+        from repositories import PacienteRepository
+        
         paciente = PacienteRepository.get_by_id(db, vacuna.paciente_id)
         if not paciente:
             raise ValueError("Paciente no encontrado")
@@ -105,3 +119,17 @@ class VacunaRepository:
         db.commit()
         db.refresh(db_vacuna)
         return db_vacuna
+    
+    @staticmethod
+    def update(db: Session, vacuna_id: int, vacuna_update: Dict[str, Any]) -> Optional[Vacuna]:
+        vacuna = VacunaRepository.get_by_id(db, vacuna_id)
+        if not vacuna:
+            return None
+        
+        for key, value in vacuna_update.items():
+            if value is not None and hasattr(vacuna, key):
+                setattr(vacuna, key, value)
+        
+        db.commit()
+        db.refresh(vacuna)
+        return vacuna

@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 # ==================== SQLALCHEMY MODELS ====================
@@ -152,19 +152,55 @@ class HealthCheck(BaseModel):
     database: Optional[str] = None
     metrics: Optional[dict] = None
 
+# ==================== SCHEMAS DE SINCRONIZACIÓN ====================
+
 class BulkSyncData(BaseModel):
     pacientes: List[PacienteCreate] = []
     vacunas: List[VacunaCreate] = []
+    last_sync_client: Optional[str] = None
 
 class BulkSyncResponse(BaseModel):
     message: str
     pacientes_sincronizados: int
     vacunas_sincronizadas: int
-    pacientes_ids: dict
-    vacunas_ids: dict
+    pacientes_ids: Dict[str, Any]
+    vacunas_ids: Dict[str, Any]
+    conflicts: Optional[List[Dict[str, Any]]] = None
+    server_timestamp: str
 
-class SyncResponse(BaseModel):
+class ClientSyncData(BaseModel):
+    last_sync: str
+    limit: Optional[int] = 100
+    offset: Optional[int] = 0
+
+class ClientSyncResponse(BaseModel):
     message: str
-    updates_count: Optional[int] = None
+    last_sync_server: str
+    pacientes: List[Dict[str, Any]] = []
+    vacunas: List[Dict[str, Any]] = []
+    total_pacientes: int = 0
+    total_vacunas: int = 0
+    has_more: bool = False
+
+class FullDataResponse(BaseModel):
+    message: str
+    server_timestamp: str
+    pacientes: List[Dict[str, Any]] = []
+    vacunas: List[Dict[str, Any]] = []
+    total_pacientes: int = 0
+    total_vacunas: int = 0
+
+class SyncStatus(BaseModel):
+    status: str
     last_sync: Optional[str] = None
-    updates: Optional[List[dict]] = None 
+    pending_changes: int = 0
+    server_available: bool = True
+    server_counts: Optional[Dict[str, int]] = None
+    error: Optional[str] = None
+
+class ConflictResolution(BaseModel):
+    conflict_id: str
+    resolution: str
+    data: Optional[Dict[str, Any]] = None
+
+SyncResponse = BulkSyncResponse
