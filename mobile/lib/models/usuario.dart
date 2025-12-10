@@ -1,3 +1,4 @@
+
 class Usuario {
   int? id;
   int? serverId;
@@ -99,6 +100,7 @@ class Usuario {
     return username.isEmpty || email.isEmpty || password.isEmpty;
   }
 
+  // SOLO UNA VEZ ESTAS PROPIEDADES - ELIMINA LAS DUPLICADAS
   bool get isAdmin => role == 'admin';
   bool get isProfessionalUser => role == 'professional' || isProfessional;
   bool get isUser => role == 'user';

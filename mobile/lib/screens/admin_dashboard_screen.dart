@@ -1,10 +1,9 @@
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/vacuna_service.dart';
 import '../services/paciente_service.dart';
-import '../services/sync_service.dart';
-import '../models/usuario.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   @override
@@ -56,28 +55,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       setState(() {
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _sincronizarTodo() async {
-    final syncService = Provider.of<SyncService>(context, listen: false);
-    final result = await syncService.fullSync();
-    
-    if (result['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Sincronización completada'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      await _loadStatistics();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error: ${result['message']}'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -141,21 +118,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    // CORRECCIÓN: Usar currentUser en lugar de getUsuarioActual()
     final currentUser = authService.currentUser;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'HealthShield Admin',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue),
+          'Panel de Administración',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
+        ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.sync),
-            onPressed: _sincronizarTodo,
-            tooltip: 'Sincronizar todo',
-          ),
           IconButton(
             icon: Icon(Icons.refresh),
             onPressed: _loadStatistics,
@@ -163,7 +138,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
-      drawer: _buildDrawer(context, authService, currentUser),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -171,15 +145,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Información del usuario
+                  // Información del administrador
                   Card(
                     child: Padding(
                       padding: EdgeInsets.all(16),
                       child: Row(
                         children: [
                           CircleAvatar(
-                            backgroundColor: Colors.blue,
-                            child: Icon(Icons.person, color: Colors.white),
+                            backgroundColor: Colors.red,
+                            child: Icon(Icons.admin_panel_settings, color: Colors.white),
                           ),
                           SizedBox(width: 16),
                           Expanded(
@@ -193,7 +167,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 SizedBox(height: 4),
                                 Chip(
                                   label: Text(
-                                    'ADMIN',
+                                    'ADMINISTRADOR',
                                     style: TextStyle(color: Colors.white, fontSize: 10),
                                   ),
                                   backgroundColor: Colors.red,
@@ -215,7 +189,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                   // Estadísticas
                   Text(
-                    'Estadísticas',
+                    'Estadísticas del Sistema',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 16),
@@ -228,7 +202,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                     children: [
-                      _buildStatCard('Vacunas', _totalVacunas, Icons.medical_services, Colors.blue),
+                      _buildStatCard('Vacunas Registradas', _totalVacunas, Icons.medical_services, Colors.blue),
                       _buildStatCard('Pacientes', _totalPacientes, Icons.people, Colors.green),
                       _buildStatCard('Usuarios', _totalUsuarios, Icons.person, Colors.orange),
                       _buildStatCard('Pendientes Sync', _pendientesSincronizacion, Icons.sync, Colors.red),
@@ -239,7 +213,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                   // Acciones administrativas
                   Text(
-                    'Acciones',
+                    'Acciones de Administración',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 16),
@@ -275,7 +249,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
 
                   _buildActionButton(
-                    title: 'Sincronización Avanzada',
+                    title: 'Sincronización',
                     subtitle: 'Configurar y monitorear sincronización',
                     icon: Icons.sync_disabled,
                     color: Colors.orange,
@@ -341,130 +315,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ),
                     ),
                   ),
+                  
+                  SizedBox(height: 24),
+                  
+                  // Botón para volver al menú principal
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      icon: Icon(Icons.arrow_back),
+                      label: Text('Volver al Menú Principal'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context, AuthService authService, Usuario? currentUser) {
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              color: Colors.blue,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.admin_panel_settings, size: 48, color: Colors.white),
-                SizedBox(height: 16),
-                Text(
-                  'Panel Administrativo',
-                  style: TextStyle(color: Colors.white, fontSize: 18),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'HealthShield v1.0',
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          
-          ListTile(
-            leading: Icon(Icons.dashboard),
-            title: Text('Dashboard'),
-            selected: true,
-            onTap: () {
-              Navigator.pop(context);
-            },
-          ),
-          
-          ListTile(
-            leading: Icon(Icons.people),
-            title: Text('Gestión de Usuarios'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/admin-usuarios');
-            },
-          ),
-          
-          Divider(),
-          
-          Text(
-            'Módulos de Usuario',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-            textAlign: TextAlign.center,
-          ),
-          
-          ListTile(
-            leading: Icon(Icons.medical_services),
-            title: Text('Registrar Vacuna'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/registro-vacuna');
-            },
-          ),
-          
-          ListTile(
-            leading: Icon(Icons.visibility),
-            title: Text('Ver Registros'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/visualizar-registros');
-            },
-          ),
-          
-          ListTile(
-            leading: Icon(Icons.sync),
-            title: Text('Sincronización'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/sync');
-            },
-          ),
-          
-          Divider(),
-          
-          ListTile(
-            leading: Icon(Icons.settings),
-            title: Text('Configuración'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/change-password');
-            },
-          ),
-          
-          ListTile(
-            leading: Icon(Icons.help),
-            title: Text('Ayuda'),
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Centro de ayuda - Próximamente')),
-              );
-            },
-          ),
-          
-          Divider(),
-          
-          ListTile(
-            leading: Icon(Icons.logout, color: Colors.red),
-            title: Text('Cerrar Sesión', style: TextStyle(color: Colors.red)),
-            onTap: () async {
-              await authService.logout();
-              Navigator.pushNamedAndRemoveUntil(
-                context, 
-                '/welcome', 
-                (route) => false
-              );
-            },
-          ),
-        ],
-      ),
     );
   }
 }

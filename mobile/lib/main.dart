@@ -1,11 +1,16 @@
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+// Database and Services
+import 'package:healthshield/db_sqlite/database_helper.dart';
+import 'package:healthshield/db_sqlite/cache_service.dart';
 import 'package:healthshield/services/auth_service.dart';
 import 'package:healthshield/services/vacuna_service.dart';
 import 'package:healthshield/services/paciente_service.dart';
-import 'package:healthshield/services/sync_service.dart';
-import 'package:healthshield/db_sqlite/database_helper.dart';
-import 'package:healthshield/db_sqlite/cache_service.dart';
+import 'package:healthshield/services/api_service.dart';
+
+// Screens
 import 'package:healthshield/screens/welcome_screen.dart';
 import 'package:healthshield/screens/login_screen.dart';
 import 'package:healthshield/screens/professional_register_screen.dart';
@@ -17,66 +22,26 @@ import 'package:healthshield/screens/change_password_screen.dart';
 import 'package:healthshield/screens/admin_dashboard_screen.dart';
 import 'package:healthshield/screens/admin_usuarios_screen.dart';
 import 'package:healthshield/screens/gestion_pacientes_screen.dart';
-import 'package:healthshield/utils/route_guard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  print('🚀 Inicializando HealthShield...');
+  
   try {
-    print('🚀 Inicializando aplicación HealthShield...');
-    
-    // Inicializar DatabaseHelper primero
-    await DatabaseHelper.instance.database;
+    // Inicializar base de datos
+    final databaseHelper = DatabaseHelper.instance;
+    await databaseHelper.database;
     print('✅ Base de datos inicializada');
     
-    // Inicializar servicios
-    final cacheService = CacheService();
-    
-    final authService = AuthService(cacheService: cacheService);
-    await authService.init();
-    print('✅ AuthService inicializado');
-    
-    final pacienteService = PacienteService();
-    print('✅ PacienteService inicializado');
-    
-    final vacunaService = VacunaService();
-    await vacunaService.init();
-    print('✅ VacunaService inicializado');
-    
-    runApp(
-      MyApp(
-        authService: authService,
-        pacienteService: pacienteService,
-        vacunaService: vacunaService,
-        cacheService: cacheService,
-      ),
-    );
+    runApp(MyApp());
   } catch (e) {
-    print('❌ Error crítico inicializando app: $e');
+    print('❌ Error crítico: $e');
     runApp(
       MaterialApp(
         home: Scaffold(
           body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error, size: 64, color: Colors.red),
-                SizedBox(height: 20),
-                Text(
-                  'Error inicializando aplicación',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 10),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    e.toString(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
+            child: Text('Error inicializando app: $e'),
           ),
         ),
       ),
@@ -85,55 +50,189 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  final AuthService authService;
-  final PacienteService pacienteService;
-  final VacunaService vacunaService;
-  final CacheService cacheService;
-
-  MyApp({
-    required this.authService,
-    required this.pacienteService,
-    required this.vacunaService,
-    required this.cacheService,
-  });
-
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider<AuthService>.value(value: authService),
-        Provider<PacienteService>.value(value: pacienteService),
-        Provider<VacunaService>.value(value: vacunaService),
-        Provider<CacheService>.value(value: cacheService),
+        Provider(create: (_) => DatabaseHelper.instance),
+        Provider(create: (_) => CacheService()),
+        Provider(create: (_) => ApiService()),
+        Provider(
+          create: (context) {
+            final cacheService = context.read<CacheService>();
+            return AuthService(cacheService: cacheService);
+          },
+        ),
+        Provider(
+          create: (context) => VacunaService(),
+        ),
+        Provider(
+          create: (context) => PacienteService(),
+        ),
       ],
-      child: MaterialApp(
-        title: 'HealthShield',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-          fontFamily: 'Roboto',
-          appBarTheme: AppBarTheme(
-            elevation: 2,
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.blue,
-            centerTitle: true,
+      child: Builder(
+        builder: (context) {
+          // Inicializar AuthService después de que los providers estén listos
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final authService = context.read<AuthService>();
+            authService.init();
+          });
+          
+          return MaterialApp(
+            title: 'HealthShield',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              primarySwatch: Colors.blue,
+              visualDensity: VisualDensity.adaptivePlatformDensity,
+              appBarTheme: AppBarTheme(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.blue,
+                elevation: 1,
+                centerTitle: true,
+              ),
+            ),
+            
+            // Ruta inicial
+            initialRoute: '/welcome',
+            
+            // Configuración de rutas nombradas
+            routes: {
+              // Pantallas de autenticación (acceso público)
+              '/welcome': (context) => WelcomeScreen(),
+              '/login': (context) => LoginScreen(),
+              '/register': (context) => ProfessionalRegisterScreen(),
+              '/professional-register': (context) => ProfessionalRegisterScreen(),
+              
+              // Pantallas principales
+              '/main-menu': (context) => _buildProtectedScreen(MainMenuScreen(), context),
+              '/dashboard': (context) => _buildProtectedScreen(MainMenuScreen(), context),
+              
+              // Pantallas de funcionalidad
+              '/registro-vacuna': (context) => _buildProtectedScreen(RegistroVacunaScreen(), context),
+              '/visualizar-registros': (context) => _buildProtectedScreen(VisualizarRegistrosScreen(), context),
+              '/sync': (context) => _buildProtectedScreen(SyncScreen(), context),
+              '/change-password': (context) => _buildProtectedScreen(ChangePasswordScreen(), context),
+              '/gestion-pacientes': (context) => _buildProtectedScreen(GestionPacientesScreen(), context),
+              
+              // Pantallas de admin (solo para administradores)
+              '/admin-dashboard': (context) => _buildAdminProtectedScreen(AdminDashboardScreen(), context),
+              '/admin-usuarios': (context) => _buildAdminProtectedScreen(AdminUsuariosScreen(), context),
+            },
+            
+            // Manejo de rutas no definidas
+            onUnknownRoute: (settings) {
+              return MaterialPageRoute(
+                builder: (context) => WelcomeScreen(),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+  
+  // Función para proteger pantallas que requieren autenticación
+  Widget _buildProtectedScreen(Widget screen, BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser == null) {
+      // Si no hay usuario autenticado, redirigir al login
+      Future.microtask(() {
+        Navigator.pushReplacementNamed(context, '/login');
+      });
+      return _buildLoadingScreen();
+    }
+    
+    return screen;
+  }
+  
+  // Función para proteger pantallas que requieren ser admin
+  Widget _buildAdminProtectedScreen(Widget screen, BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser == null) {
+      // Si no hay usuario autenticado, redirigir al login
+      Future.microtask(() {
+        Navigator.pushReplacementNamed(context, '/login');
+      });
+      return _buildLoadingScreen();
+    }
+    
+    if (!currentUser.isAdmin) {
+      // Si no es admin, mostrar pantalla de acceso denegado
+      return _buildAccessDeniedScreen(context);
+    }
+    
+    return screen;
+  }
+  
+  Widget _buildLoadingScreen() {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Verificando acceso...'),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildAccessDeniedScreen(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('HealthShield'),
+        automaticallyImplyLeading: false,
+      ),
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.admin_panel_settings, size: 64, color: Colors.red),
+              SizedBox(height: 24),
+              Text(
+                'Acceso Restringido',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Esta sección es solo para administradores del sistema.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Si necesitas acceso de administrador, contacta al soporte técnico.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[500],
+                ),
+              ),
+              SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, '/main-menu');
+                },
+                child: Text('Volver al Menú Principal'),
+              ),
+            ],
           ),
         ),
-        initialRoute: '/welcome',
-        debugShowCheckedModeBanner: false,
-        routes: {
-          '/welcome': (context) => WelcomeScreen(),
-          '/login': (context) => LoginScreen(),
-          '/register': (context) => ProfessionalRegisterScreen(),
-          '/main-menu': (context) => RouteGuard.authenticatedOnly(MainMenuScreen()),
-          '/registro-vacuna': (context) => RouteGuard.authenticatedOnly(RegistroVacunaScreen()),
-          '/visualizar-registros': (context) => RouteGuard.authenticatedOnly(VisualizarRegistrosScreen()),
-          '/sync': (context) => RouteGuard.authenticatedOnly(SyncScreen()),
-          '/change-password': (context) => RouteGuard.authenticatedOnly(ChangePasswordScreen()),
-          '/admin-dashboard': (context) => RouteGuard.adminOnly(AdminDashboardScreen()),
-          '/admin-usuarios': (context) => RouteGuard.adminOnly(AdminUsuariosScreen()),
-          '/gestion-pacientes': (context) => RouteGuard.authenticatedOnly(GestionPacientesScreen()),
-        },
       ),
     );
   }

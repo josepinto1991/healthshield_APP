@@ -1,3 +1,4 @@
+
 import 'package:sqflite/sqflite.dart';
 import '../models/usuario.dart';
 import '../models/vacuna.dart';
@@ -117,8 +118,6 @@ class CacheService {
 
   Future<void> clearSensitiveData() async {
     final db = await _dbHelper.database;
-    // Aquí puedes limpiar datos sensibles si es necesario
-    // Por ahora solo cerramos la conexión
     await _dbHelper.close();
   }
 

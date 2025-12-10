@@ -1,7 +1,7 @@
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import 'main_menu_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -23,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final authService = Provider.of<AuthService>(context, listen: false);
       
-      final usuario = await authService.loginUsuario(
+      final result = await authService.loginUsuario(
         _usernameController.text,
         _passwordController.text,
       );
@@ -32,15 +32,16 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
       });
 
-      if (usuario != null) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => MainMenuScreen()),
-          (route) => false,
-        );
+      if (result['success']) {
+        // Login exitoso, navegar al menú principal
+        Navigator.pushReplacementNamed(context, '/main-menu');
       } else {
+        // Mostrar error
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Usuario o contraseña incorrectos')),
+          SnackBar(
+            content: Text(result['error'] ?? 'Error en el login'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -54,14 +55,6 @@ class _LoginScreenState extends State<LoginScreen> {
           icon: Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        // title:  Text(
-        //             'HealthShield',
-        //             style: TextStyle(
-        //               fontSize: 20,
-        //               fontWeight: FontWeight.bold,
-        //               color: Colors.blue,
-        //       ),
-        //   ),
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(24.0),
@@ -70,7 +63,6 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-                          
               SizedBox(height: 32),
               
               Center(
@@ -158,7 +150,6 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(
                 child: TextButton(
                   onPressed: () {
-                    // Navegar a la pantalla de registro en lugar de cerrar
                     Navigator.pushNamed(context, '/register');
                   },
                   child: Text(

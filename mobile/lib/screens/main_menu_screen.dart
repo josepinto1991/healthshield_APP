@@ -1,12 +1,8 @@
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
-import 'registro_vacuna_screen.dart';
-import 'visualizar_registros_screen.dart';
-import 'sync_screen.dart';
-import 'change_password_screen.dart';
-import 'admin_dashboard_screen.dart';
 
 class MainMenuScreen extends StatelessWidget {
   Future<void> _logout(BuildContext context) async {
@@ -48,6 +44,7 @@ class MainMenuScreen extends StatelessWidget {
             IconButton(
               icon: Icon(Icons.admin_panel_settings, color: Colors.red),
               onPressed: () {
+                // Navegar al dashboard de admin
                 Navigator.pushNamed(context, '/admin-dashboard');
               },
               tooltip: 'Panel Administrativo',
@@ -142,6 +139,15 @@ class MainMenuScreen extends StatelessWidget {
                           ],
                         ),
                       ),
+                      // Botón de admin si es administrador
+                      if (isAdmin)
+                        IconButton(
+                          icon: Icon(Icons.admin_panel_settings, color: Colors.red),
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/admin-dashboard');
+                          },
+                          tooltip: 'Ir al Panel de Administración',
+                        ),
                     ],
                   ),
                 ),
@@ -186,6 +192,39 @@ class MainMenuScreen extends StatelessWidget {
                 ),
               ],
             ),
+            
+            // Botón de admin dashboard (solo para administradores)
+            if (isAdmin)
+              Column(
+                children: [
+                  SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildMenuButton(
+                          icon: Icons.admin_panel_settings,
+                          title: 'Panel Administrativo',
+                          color: Colors.red,
+                          onTap: () {
+                            Navigator.pushNamed(context, '/admin-dashboard');
+                          },
+                        ),
+                      ),
+                      SizedBox(width: 16),
+                      Expanded(
+                        child: _buildMenuButton(
+                          icon: Icons.people,
+                          title: 'Gestionar Usuarios',
+                          color: Colors.purple,
+                          onTap: () {
+                            Navigator.pushNamed(context, '/admin-usuarios');
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             
             SizedBox(height: 32),
             
