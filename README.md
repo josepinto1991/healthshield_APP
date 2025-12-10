@@ -1,7 +1,10 @@
 HealthShield 🛡️ 
 Aplicación móvil Flutter para gestión de pacientes y registro de vacunas, con funcionalidad offline-first y sincronización automática.
 
-# Limpiar
+
+ Probar CI/CD
+
+# Limpiar 
 docker-compose down -v
 # Construir
 docker-compose build --no-cache
