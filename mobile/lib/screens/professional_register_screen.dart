@@ -228,7 +228,7 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
               SizedBox(height: 16),
               
               // Matrícula Profesional (Opcional)
-              Text('Matrícula Profesional (Opcional)', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Matrícula Profesional *', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
               TextFormField(
                 controller: _professionalLicenseController,
