@@ -139,3 +139,5 @@ backend/.env
 # Log files
 *.log
 logs/
+
+clean_databases.py

@@ -9,7 +9,6 @@ class AuthService {
 
   AuthService({required this.cacheService});
 
-  // ✅ CORRECTO: currentUser es una propiedad getter, no un método
   Usuario? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
   bool get isAdmin => _currentUser?.isAdmin ?? false;
@@ -20,14 +19,25 @@ class AuthService {
     // Cargar usuario actual al iniciar
     _currentUser = await cacheService.getUsuarioActual();
     
-    // Crear usuario admin si no existe
-    await _ensureAdminUser();
+    // 🔥 CREAR ADMIN SI NO EXISTE - CON MÁS LOGS
+    await _ensureAdminUserWithLogs();
     
     print('✅ AuthService inicializado');
   }
 
-  Future<void> _ensureAdminUser() async {
+  // 🔥 MÉTODO MEJORADO CON MÁS LOGS
+  Future<void> _ensureAdminUserWithLogs() async {
+    print('🔍 Verificando usuario admin...');
+    
     final usuarios = await getUsuarios();
+    print('📊 Total usuarios en sistema: ${usuarios.length}');
+    
+    // Listar todos los usuarios para debug
+    for (var i = 0; i < usuarios.length; i++) {
+      final user = usuarios[i];
+      print('👤 Usuario $i: ${user.username} | Email: ${user.email} | Rol: ${user.role} | ID: ${user.id}');
+    }
+    
     final adminExists = usuarios.any((user) => user.username == 'admin');
     
     if (!adminExists) {
@@ -47,15 +57,124 @@ class AuthService {
         createdAt: DateTime.now(),
       );
       
-      await registrarUsuarioLocal(adminUser);
-      _currentUser = adminUser;
-      print('✅ Usuario admin creado');
+      final success = await registrarUsuarioLocal(adminUser);
+      if (success) {
+        _currentUser = adminUser;
+        print('✅ Usuario admin creado exitosamente');
+        print('📋 Credenciales creadas:');
+        print('   Usuario: admin');
+        print('   Contraseña: admin123');
+        print('   Email: admin@healthshield.com');
+        print('   Rol: Administrador');
+      } else {
+        print('❌ Error creando usuario admin - Posible duplicado');
+      }
+    } else {
+      print('✅ Usuario admin ya existe');
     }
   }
 
-  // ========== REGISTRO LOCAL ==========
+  // 🔥 MÉTODO PARA FORZAR CREACIÓN DE ADMIN (para diagnóstico)
+  Future<bool> crearAdminForzado() async {
+    try {
+      print('🔄 Creando admin forzado...');
+      
+      // Obtener base de datos directamente
+      final db = await cacheService.getDatabase();
+      
+      // Primero eliminar si existe
+      try {
+        await db.delete(
+          'usuarios',
+          where: 'username = ?',
+          whereArgs: ['admin'],
+        );
+        print('🗑️ Admin anterior eliminado si existía');
+      } catch (e) {
+        print('ℹ️ No se pudo eliminar admin anterior: $e');
+      }
+      
+      // Crear nuevo admin
+      final adminUser = Usuario(
+        id: null,
+        serverId: null,
+        username: 'admin',
+        email: 'admin@healthshield.com',
+        password: 'admin123',
+        telefono: '123456789',
+        isProfessional: true,
+        professionalLicense: 'ADM-001',
+        isVerified: true,
+        role: 'admin',
+        isSynced: true,
+        createdAt: DateTime.now(),
+      );
+      
+      // Insertar directamente
+      final adminId = await db.insert('usuarios', {
+        'username': 'admin',
+        'email': 'admin@healthshield.com',
+        'password': 'admin123', // Nota: en producción esto debería estar hasheado
+        'telefono': '123456789',
+        'is_professional': 1,
+        'professional_license': 'ADM-001',
+        'is_verified': 1,
+        'role': 'admin',
+        'is_synced': 1,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      
+      if (adminId > 0) {
+        _currentUser = adminUser;
+        print('✅ Admin creado forzadamente con ID: $adminId');
+        print('🔑 Credenciales: admin / admin123');
+        return true;
+      } else {
+        print('❌ Error: No se pudo insertar admin');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error en crearAdminForzado: $e');
+      return false;
+    }
+  }
+
+  // 🔥 MÉTODO PARA DIAGNÓSTICO
+  Future<void> diagnosticarUsuarios() async {
+    print('=== DIAGNÓSTICO DE USUARIOS ===');
+    
+    try {
+      final usuarios = await getUsuarios();
+      print('📊 Total usuarios registrados: ${usuarios.length}');
+      
+      if (usuarios.isEmpty) {
+        print('⚠️ No hay usuarios en la base de datos');
+        return;
+      }
+      
+      for (var i = 0; i < usuarios.length; i++) {
+        final user = usuarios[i];
+        print('--- Usuario ${i + 1} ---');
+        print('ID: ${user.id}');
+        print('Username: ${user.username}');
+        print('Email: ${user.email}');
+        print('Rol: ${user.role}');
+        print('Es Admin: ${user.isAdmin}');
+        print('Es Profesional: ${user.isProfessional}');
+        print('Verificado: ${user.isVerified}');
+        print('Sincronizado: ${user.isSynced}');
+        print('');
+      }
+    } catch (e) {
+      print('❌ Error en diagnóstico: $e');
+    }
+  }
+
+  // ========== REGISTRO LOCAL SIMPLE ==========
   Future<bool> registrarUsuarioLocal(Usuario usuario) async {
     try {
+      print('📝 Registrando usuario local: ${usuario.username}');
+      
       final usuarios = await cacheService.getUsuarios();
       final existingUser = usuarios.firstWhere(
         (u) => u.username == usuario.username || u.email == usuario.email,
@@ -68,6 +187,7 @@ class AuthService {
       }
 
       await cacheService.insertUsuario(usuario);
+      print('✅ Usuario registrado localmente: ${usuario.username}');
       return true;
     } catch (e) {
       print('❌ Error registrando usuario local: $e');
@@ -75,21 +195,24 @@ class AuthService {
     }
   }
 
-  // ✅ AÑADIR: Método necesario para admin_usuarios_screen.dart
   Future<bool> registrarUsuario(Usuario usuario) async {
     return await registrarUsuarioLocal(usuario);
   }
 
+  // ========== REGISTRO PROFESIONAL SIMPLIFICADO ==========
   Future<Map<String, dynamic>> registrarUsuarioProfesional({
     required Usuario usuario,
-    required String cedulaVerificacion,
+    String cedulaVerificacion = '',
   }) async {
     try {
+      print('👨‍⚕️ Registrando profesional: ${usuario.username}');
+      
       final usuarios = await cacheService.getUsuarios();
       final existsLocally = usuarios.any((u) => 
         u.username == usuario.username || u.email == usuario.email);
       
       if (existsLocally) {
+        print('⚠️ Usuario ya existe en el sistema');
         return {
           'success': false,
           'error': 'Usuario ya existe en el sistema',
@@ -97,32 +220,39 @@ class AuthService {
         };
       }
 
-      bool verificationSuccessful = false;
-      Map<String, dynamic> verificationResult = {};
+      // Registro simple sin verificación externa
+      final professionalUser = Usuario(
+        id: null,
+        serverId: null,
+        username: usuario.username,
+        email: usuario.email,
+        password: usuario.password,
+        telefono: usuario.telefono,
+        isProfessional: true,
+        professionalLicense: usuario.professionalLicense,
+        isVerified: true,
+        role: 'professional',
+        isSynced: false,
+        createdAt: DateTime.now(),
+      );
       
-      final hasConnection = await _checkInternetConnection();
+      final success = await registrarUsuarioLocal(professionalUser);
       
-      if (hasConnection) {
-        print('🌐 Verificando profesional en línea...');
-        verificationResult = await _apiService.verifyProfessional(cedulaVerificacion);
-        verificationSuccessful = verificationResult['success'] ?? false;
-        
-        if (!verificationSuccessful) {
-          return {
-            'success': false,
-            'error': verificationResult['message'] ?? 'Error en verificación',
-            'isOffline': false,
-          };
-        }
+      if (success) {
+        print('✅ Profesional registrado exitosamente: ${usuario.username}');
+        return {
+          'success': true,
+          'message': 'Profesional registrado exitosamente',
+          'user': professionalUser,
+          'isOffline': true,
+          'requiresSync': false,
+        };
       } else {
-        print('📴 Modo offline - Saltando verificación inicial');
-        verificationSuccessful = true;
-      }
-
-      if (hasConnection && verificationSuccessful) {
-        return await _registrarProfesionalOnline(usuario, cedulaVerificacion, verificationResult);
-      } else {
-        return await _registrarProfesionalOffline(usuario, cedulaVerificacion);
+        return {
+          'success': false,
+          'error': 'Error guardando usuario localmente',
+          'isOffline': true,
+        };
       }
     } catch (e) {
       print('❌ Error registrando profesional: $e');
@@ -134,146 +264,23 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>> _registrarProfesionalOnline(
-    Usuario usuario, 
-    String cedulaVerificacion,
-    Map<String, dynamic> verificationResult
-  ) async {
-    try {
-      final registerResult = await _apiService.registerProfessional(usuario, cedulaVerificacion);
-      
-      if (registerResult['success']) {
-        final userData = registerResult['data']['user'];
-        final serverToken = registerResult['data']['token'];
-        
-        final localUser = Usuario(
-          id: null,
-          serverId: userData['id'],
-          username: userData['username'] ?? usuario.username,
-          email: userData['email'] ?? usuario.email,
-          password: usuario.password,
-          telefono: userData['telefono'] ?? usuario.telefono,
-          isProfessional: true,
-          professionalLicense: verificationResult['professional_license'] ?? usuario.professionalLicense,
-          isVerified: true,
-          role: 'professional',
-          isSynced: true,
-          createdAt: DateTime.parse(userData['created_at'] ?? DateTime.now().toIso8601String()),
-        );
-        
-        await registrarUsuarioLocal(localUser);
-        _apiService.token = serverToken;
-        _currentUser = localUser;
-        
-        return {
-          'success': true,
-          'message': 'Profesional registrado exitosamente',
-          'user': localUser,
-          'token': serverToken,
-          'isOffline': false,
-          'requiresSync': false,
-        };
-      } else {
-        return {
-          'success': false,
-          'error': registerResult['error'],
-          'isOffline': false,
-        };
-      }
-    } catch (e) {
-      print('❌ Error en registro online, intentando offline: $e');
-      return await _registrarProfesionalOffline(usuario, cedulaVerificacion);
-    }
-  }
-
-  Future<Map<String, dynamic>> _registrarProfesionalOffline(
-    Usuario usuario, 
-    String cedulaVerificacion
-  ) async {
-    try {
-      final professionalUser = Usuario(
-        id: null,
-        serverId: null,
-        username: usuario.username,
-        email: usuario.email,
-        password: usuario.password,
-        telefono: usuario.telefono,
-        isProfessional: true,
-        professionalLicense: usuario.professionalLicense,
-        isVerified: false,
-        role: 'professional',
-        isSynced: false,
-        createdAt: DateTime.now(),
-      );
-      
-      final success = await registrarUsuarioLocal(professionalUser);
-      
-      if (success) {
-        await _guardarVerificacionPendiente(professionalUser, cedulaVerificacion);
-        
-        return {
-          'success': true,
-          'message': 'Profesional registrado offline. Se sincronizará cuando haya conexión.',
-          'user': professionalUser,
-          'isOffline': true,
-          'requiresSync': true,
-        };
-      } else {
-        return {
-          'success': false,
-          'error': 'Error guardando usuario localmente',
-          'isOffline': true,
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'error': 'Error en registro offline: $e',
-        'isOffline': true,
-      };
-    }
-  }
-
-  Future<void> _guardarVerificacionPendiente(Usuario usuario, String cedula) async {
-    try {
-      final db = await cacheService.getDatabase();
-      
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='pending_verifications'"
-      );
-      
-      if (tables.isEmpty) {
-        await db.execute('''
-          CREATE TABLE pending_verifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario_id INTEGER NOT NULL,
-            cedula TEXT NOT NULL,
-            created_at TEXT NOT NULL
-          )
-        ''');
-      }
-      
-      await db.insert('pending_verifications', {
-        'usuario_id': usuario.id,
-        'cedula': cedula,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-      print('📝 Verificación pendiente guardada para usuario ${usuario.username}');
-    } catch (e) {
-      print('❌ Error guardando verificación pendiente: $e');
-    }
-  }
-
+  // ========== LOGIN DUAL (ONLINE/OFFLINE) ==========
   Future<Map<String, dynamic>> loginUsuario(String username, String password) async {
     try {
+      print('🔐 Intentando login para: $username');
+      
+      // Primero intentar login offline
       final offlineUser = await cacheService.getUsuarioByCredentials(username, password);
       if (offlineUser != null) {
+        print('📱 Login offline exitoso para: $username');
         _currentUser = offlineUser;
         
+        // Si es el usuario admin por defecto, asegurar rol admin
         if (offlineUser.username == 'admin' && offlineUser.password == 'admin123') {
           final adminUser = offlineUser.copyWith(role: 'admin');
           _currentUser = adminUser;
           await cacheService.actualizarUsuario(adminUser);
+          print('👑 Usuario admin detectado, rol asegurado');
         }
         
         return {
@@ -284,11 +291,14 @@ class AuthService {
         };
       }
 
+      // Si no existe offline, verificar si hay conexión para login online
       final hasConnection = await _checkInternetConnection();
       if (hasConnection) {
+        print('🌐 Intentando login online...');
         final onlineResult = await _apiService.login(username, password);
         
         if (onlineResult['success']) {
+          print('✅ Login online exitoso');
           final userData = onlineResult['data']['user'];
           final user = Usuario(
             id: null,
@@ -320,6 +330,7 @@ class AuthService {
         }
       }
 
+      print('❌ Login fallido para: $username');
       return {
         'success': false,
         'error': 'Usuario o contraseña incorrectos',
@@ -335,17 +346,22 @@ class AuthService {
 
   Future<bool> _checkInternetConnection() async {
     try {
-      return await _apiService.checkServerStatus();
+      final hasConnection = await _apiService.checkServerStatus();
+      print(hasConnection ? '🌐 Conexión a internet disponible' : '📴 Sin conexión a internet');
+      return hasConnection;
     } catch (e) {
       return false;
     }
   }
 
+  // ========== GESTIÓN DE USUARIOS ==========
   Future<bool> actualizarUsuario(Usuario usuario) async {
     try {
+      print('✏️ Actualizando usuario: ${usuario.username}');
       final success = await cacheService.actualizarUsuario(usuario);
       if (success && usuario.id == _currentUser?.id) {
         _currentUser = usuario;
+        print('✅ Usuario actualizado');
       }
       return success;
     } catch (e) {
@@ -356,8 +372,12 @@ class AuthService {
 
   Future<bool> cambiarPassword(int usuarioId, String nuevaPassword) async {
     try {
+      print('🔐 Cambiando password para usuario ID: $usuarioId');
       final usuario = await cacheService.getUsuarioById(usuarioId);
-      if (usuario == null) return false;
+      if (usuario == null) {
+        print('❌ Usuario no encontrado');
+        return false;
+      }
       
       final usuarioActualizado = usuario.copyWith(password: nuevaPassword);
       return await cacheService.actualizarUsuario(usuarioActualizado);
@@ -369,15 +389,20 @@ class AuthService {
 
   Future<List<Usuario>> getUsuarios() async {
     try {
-      return await cacheService.getUsuarios();
+      final usuarios = await cacheService.getUsuarios();
+      print('📊 Obteniendo usuarios: ${usuarios.length} encontrados');
+      return usuarios;
     } catch (e) {
       print('❌ Error obteniendo usuarios: $e');
       return [];
     }
   }
 
+  // ========== SINCRONIZACIÓN SIMPLIFICADA ==========
   Future<Map<String, dynamic>> syncOfflineUsers() async {
     try {
+      print('🔄 Sincronizando usuarios offline...');
+      
       final hasConnection = await _checkInternetConnection();
       if (!hasConnection) {
         return {
@@ -387,44 +412,29 @@ class AuthService {
         };
       }
 
-      final db = await cacheService.getDatabase();
-      final pendingVerifications = await db.query('pending_verifications');
+      // Solo sincronizar usuarios no sincronizados
+      final usuarios = await cacheService.getUsuarios();
+      final unsyncedUsers = usuarios.where((u) => !u.isSynced).toList();
       int syncedCount = 0;
 
-      for (final verification in pendingVerifications) {
-        final userId = verification['usuario_id'] as int;
-        final cedula = verification['cedula'] as String;
-        
-        final user = await cacheService.getUsuarioById(userId);
-        if (user == null) continue;
-        
+      print('📊 Usuarios por sincronizar: ${unsyncedUsers.length}');
+
+      for (final user in unsyncedUsers) {
         try {
-          final verificationResult = await _apiService.verifyProfessional(cedula);
+          // Intentar registrar en el servidor
+          final result = await _apiService.register(user);
           
-          if (verificationResult['success'] ?? false) {
-            final registerResult = await _apiService.registerProfessional(user, cedula);
+          if (result['success']) {
+            final serverData = result['data']['user'];
             
-            if (registerResult['success']) {
-              final serverData = registerResult['data']['user'];
-              
-              final updatedUser = user.copyWith(
-                serverId: serverData['id'],
-                isVerified: true,
-                isSynced: true,
-                professionalLicense: verificationResult['professional_license'] ?? user.professionalLicense,
-              );
-              
-              await cacheService.actualizarUsuario(updatedUser);
-              
-              await db.delete(
-                'pending_verifications',
-                where: 'id = ?',
-                whereArgs: [verification['id']],
-              );
-              
-              syncedCount++;
-              print('✅ Usuario profesional sincronizado: ${user.username}');
-            }
+            final updatedUser = user.copyWith(
+              serverId: serverData['id'],
+              isSynced: true,
+            );
+            
+            await cacheService.actualizarUsuario(updatedUser);
+            syncedCount++;
+            print('✅ Usuario sincronizado: ${user.username}');
           }
         } catch (e) {
           print('❌ Error sincronizando usuario ${user.username}: $e');
@@ -432,7 +442,7 @@ class AuthService {
       }
 
       return {
-        'success': true,
+        'success': syncedCount > 0,
         'message': 'Sincronizados $syncedCount usuarios',
         'synced': syncedCount,
       };
@@ -445,8 +455,10 @@ class AuthService {
     }
   }
 
+  // ========== LOGOUT ==========
   Future<void> logout() async {
     try {
+      print('🚪 Cerrando sesión...');
       _currentUser = null;
       _apiService.token = null;
       await cacheService.clearSensitiveData();
@@ -458,5 +470,29 @@ class AuthService {
 
   Future<void> close() async {
     await cacheService.close();
+  }
+
+  // 🔥 MÉTODO PARA VERIFICAR ESTADO DEL ADMIN
+  Future<bool> verificarAdmin() async {
+    try {
+      final usuarios = await getUsuarios();
+      final adminExists = usuarios.any((user) => user.username == 'admin');
+      
+      if (adminExists) {
+        final adminUser = usuarios.firstWhere((user) => user.username == 'admin');
+        print('✅ Admin verificado:');
+        print('   Username: ${adminUser.username}');
+        print('   Email: ${adminUser.email}');
+        print('   Rol: ${adminUser.role}');
+        print('   ID: ${adminUser.id}');
+        return true;
+      } else {
+        print('❌ Admin no encontrado');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error verificando admin: $e');
+      return false;
+    }
   }
 }

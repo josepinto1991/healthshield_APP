@@ -3,7 +3,7 @@ import 'package:path/path.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'healthshield_cache.db';
-  static const _databaseVersion = 4; // Aumenta la versión para forzar recreación
+  static const _databaseVersion = 5; // ✅ Cambiar de 4 a 5
 
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
@@ -18,9 +18,6 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), _databaseName);
-    
-    // Si hay problemas, eliminar la base de datos existente
-    // await deleteDatabase(path); // Descomentar solo si es necesario
     
     return await openDatabase(
       path,
@@ -81,12 +78,13 @@ class DatabaseHelper {
       )
     ''');
 
-    // Tabla de vacunas
+    // ✅ TABLA VACUNAS ACTUALIZADA
     await db.execute('''
       CREATE TABLE IF NOT EXISTS vacunas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         server_id INTEGER,
-        paciente_id INTEGER NOT NULL,
+        paciente_id INTEGER, -- Cambiado a opcional
+        paciente_server_id INTEGER, -- ✅ Agregada
         nombre_vacuna TEXT NOT NULL,
         fecha_aplicacion TEXT NOT NULL,
         lote TEXT,
@@ -96,7 +94,8 @@ class DatabaseHelper {
         last_sync TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
-        FOREIGN KEY (paciente_id) REFERENCES pacientes (id)
+        nombre_paciente TEXT, -- ✅ AGREGADA
+        cedula_paciente TEXT -- ✅ AGREGADA
       )
     ''');
 
@@ -120,7 +119,6 @@ class DatabaseHelper {
     );
     
     if (existingAdmin.isEmpty) {
-      // Insertar usuario admin por defecto solo si no existe
       await db.insert('usuarios', {
         'username': 'admin',
         'email': 'admin@healthshield.com',
@@ -160,12 +158,14 @@ class DatabaseHelper {
       case 4:
         await _migrateToVersion4(db);
         break;
+      case 5:
+        await _migrateToVersion5(db); // ✅ NUEVA MIGRACIÓN
+        break;
     }
   }
 
   Future<void> _migrateToVersion2(Database db) async {
     try {
-      // Agregar last_sync a las tablas si existen
       final tables = ['usuarios', 'pacientes', 'vacunas'];
       
       for (var table in tables) {
@@ -173,7 +173,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE $table ADD COLUMN last_sync TEXT');
           print('✅ Agregada columna last_sync a tabla $table');
         } catch (e) {
-          print('ℹ️ Columna last_sync ya existe en $table o tabla no existe: $e');
+          print('ℹ️ Columna last_sync ya existe en $table: $e');
         }
       }
     } catch (e) {
@@ -183,7 +183,6 @@ class DatabaseHelper {
 
   Future<void> _migrateToVersion3(Database db) async {
     try {
-      // Crear tabla de logs si no existe
       await db.execute('''
         CREATE TABLE IF NOT EXISTS sync_logs (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,12 +201,10 @@ class DatabaseHelper {
 
   Future<void> _migrateToVersion4(Database db) async {
     try {
-      // Agregar columna role a usuarios si no existe
       try {
         await db.execute('ALTER TABLE usuarios ADD COLUMN role TEXT DEFAULT "user"');
         print('✅ Agregada columna role a tabla usuarios');
         
-        // Actualizar usuario admin si existe
         await db.update(
           'usuarios',
           {'role': 'admin'},
@@ -223,10 +220,67 @@ class DatabaseHelper {
     }
   }
 
+  // ✅ NUEVA MIGRACIÓN PARA VERSIÓN 5
+  Future<void> _migrateToVersion5(Database db) async {
+    try {
+      print('🔄 Actualizando tabla vacunas...');
+      
+      // Agregar columnas faltantes a tabla vacunas
+      try {
+        await db.execute('ALTER TABLE vacunas ADD COLUMN nombre_paciente TEXT');
+        print('✅ Agregada columna nombre_paciente a tabla vacunas');
+      } catch (e) {
+        print('ℹ️ Columna nombre_paciente ya existe: $e');
+      }
+      
+      try {
+        await db.execute('ALTER TABLE vacunas ADD COLUMN cedula_paciente TEXT');
+        print('✅ Agregada columna cedula_paciente a tabla vacunas');
+      } catch (e) {
+        print('ℹ️ Columna cedula_paciente ya existe: $e');
+      }
+      
+      try {
+        await db.execute('ALTER TABLE vacunas ADD COLUMN paciente_server_id INTEGER');
+        print('✅ Agregada columna paciente_server_id a tabla vacunas');
+      } catch (e) {
+        print('ℹ️ Columna paciente_server_id ya existe: $e');
+      }
+      
+      // Cambiar paciente_id a opcional si no lo es ya
+      try {
+        // No hay ALTER para cambiar NOT NULL, así que manejaremos en la lógica
+        print('ℹ️ paciente_id se manejará como opcional en la lógica');
+      } catch (e) {
+        print('ℹ️ No se pudo modificar paciente_id: $e');
+      }
+      
+      print('✅ Migración a versión 5 completada');
+    } catch (e) {
+      print('❌ Error en migración a versión 5: $e');
+    }
+  }
+
   Future<void> deleteDatabaseFile() async {
     String path = join(await getDatabasesPath(), _databaseName);
     await deleteDatabase(path);
     print('🗑️ Base de datos eliminada');
+  }
+
+  // ✅ NUEVO MÉTODO: Verificar estructura de tablas
+  Future<void> verificarEstructura() async {
+    final db = await database;
+    
+    final tablas = ['usuarios', 'pacientes', 'vacunas'];
+    
+    for (var tabla in tablas) {
+      print('📋 Estructura de tabla $tabla:');
+      final info = await db.rawQuery('PRAGMA table_info($tabla)');
+      for (var col in info) {
+        print('  ${col['name']} (${col['type']}) - PK: ${col['pk']} - NotNull: ${col['notnull']}');
+      }
+      print('');
+    }
   }
 
   Future<void> close() async {

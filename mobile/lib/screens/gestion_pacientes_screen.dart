@@ -86,20 +86,7 @@ class _GestionPacientesScreenState extends State<GestionPacientesScreen> {
     );
 
     try {
-      // Guardar localmente
       await pacienteService.crearPaciente(nuevoPaciente);
-      
-      // Intentar sincronizar con el servidor si hay conexión
-      final hasConnection = await apiService.checkServerStatus();
-      if (hasConnection) {
-        final result = await apiService.crearPaciente(nuevoPaciente);
-        if (result['success']) {
-          final serverId = result['data']['id'];
-          // Marcar como sincronizado
-          // Necesitaríamos el ID local del paciente recién creado
-          // Esto requeriría modificar el método crearPaciente para retornar el ID
-        }
-      }
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -108,7 +95,6 @@ class _GestionPacientesScreenState extends State<GestionPacientesScreen> {
         ),
       );
       
-      // Limpiar formulario
       _cedulaController.clear();
       _nombreController.clear();
       _fechaNacimientoController.clear();
@@ -137,6 +123,9 @@ class _GestionPacientesScreenState extends State<GestionPacientesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🔥 OBTENER PADDING INFERIOR SEGURO
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -154,148 +143,152 @@ class _GestionPacientesScreenState extends State<GestionPacientesScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Barra de búsqueda
-          Padding(
-            padding: EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _buscarController,
-              decoration: InputDecoration(
-                labelText: 'Buscar pacientes',
-                hintText: 'Por cédula o nombre',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.clear),
-                  onPressed: () {
-                    _buscarController.clear();
-                    _buscarPacientes();
-                  },
+      body: Container(
+        // 🔥 PADDING INFERIOR DINÁMICO
+        padding: EdgeInsets.only(bottom: bottomPadding),
+        child: Column(
+          children: [
+            // Barra de búsqueda
+            Padding(
+              padding: EdgeInsets.all(16.0),
+              child: TextField(
+                controller: _buscarController,
+                decoration: InputDecoration(
+                  labelText: 'Buscar pacientes',
+                  hintText: 'Por cédula o nombre',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.clear),
+                    onPressed: () {
+                      _buscarController.clear();
+                      _buscarPacientes();
+                    },
+                  ),
                 ),
+                onChanged: (value) => _buscarPacientes(),
               ),
-              onChanged: (value) => _buscarPacientes(),
             ),
-          ),
-          
-          // Formulario para nuevo paciente
-          if (_showForm)
-            Card(
-              margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text('Nuevo Paciente', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 16),
-                    TextField(
-                      controller: _cedulaController,
-                      decoration: InputDecoration(
-                        labelText: 'Cédula *',
-                        border: OutlineInputBorder(),
+            
+            // Formulario para nuevo paciente
+            if (_showForm)
+              Card(
+                margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Text('Nuevo Paciente', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 16),
+                      TextField(
+                        controller: _cedulaController,
+                        decoration: InputDecoration(
+                          labelText: 'Cédula *',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: _nombreController,
-                      decoration: InputDecoration(
-                        labelText: 'Nombre Completo *',
-                        border: OutlineInputBorder(),
+                      SizedBox(height: 8),
+                      TextField(
+                        controller: _nombreController,
+                        decoration: InputDecoration(
+                          labelText: 'Nombre Completo *',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: _fechaNacimientoController,
-                      decoration: InputDecoration(
-                        labelText: 'Fecha de Nacimiento (DD/MM/AAAA)',
-                        border: OutlineInputBorder(),
+                      SizedBox(height: 8),
+                      TextField(
+                        controller: _fechaNacimientoController,
+                        decoration: InputDecoration(
+                          labelText: 'Fecha de Nacimiento (DD/MM/AAAA)',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: _telefonoController,
-                      decoration: InputDecoration(
-                        labelText: 'Teléfono',
-                        border: OutlineInputBorder(),
+                      SizedBox(height: 8),
+                      TextField(
+                        controller: _telefonoController,
+                        decoration: InputDecoration(
+                          labelText: 'Teléfono',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.phone,
                       ),
-                      keyboardType: TextInputType.phone,
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: _direccionController,
-                      decoration: InputDecoration(
-                        labelText: 'Dirección',
-                        border: OutlineInputBorder(),
+                      SizedBox(height: 8),
+                      TextField(
+                        controller: _direccionController,
+                        decoration: InputDecoration(
+                          labelText: 'Dirección',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
                       ),
-                      maxLines: 2,
-                    ),
-                    SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _guardarPaciente,
-                            child: Text('Guardar'),
+                      SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _guardarPaciente,
+                              child: Text('Guardar'),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          
-          // Lista de pacientes
-          Expanded(
-            child: _isLoading
-                ? Center(child: CircularProgressIndicator())
-                : _pacientesFiltrados.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.people_outline, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text(
-                              'No hay pacientes registrados',
-                              style: TextStyle(fontSize: 16, color: Colors.grey),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Haz clic en + para agregar un paciente',
-                              style: TextStyle(fontSize: 14, color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: _pacientesFiltrados.length,
-                        itemBuilder: (context, index) {
-                          final paciente = _pacientesFiltrados[index];
-                          return Card(
-                            margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                            child: ListTile(
-                              leading: Icon(Icons.person, color: Colors.blue),
-                              title: Text(paciente.nombre),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Cédula: ${paciente.cedula}'),
-                                  if (paciente.fechaNacimiento.isNotEmpty)
-                                    Text('Nacimiento: ${paciente.fechaNacimiento}'),
-                                  if (paciente.telefono != null)
-                                    Text('Tel: ${paciente.telefono}'),
-                                ],
+            
+            // Lista de pacientes
+            Expanded(
+              child: _isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : _pacientesFiltrados.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text(
+                                'No hay pacientes registrados',
+                                style: TextStyle(fontSize: 16, color: Colors.grey),
                               ),
-                              trailing: paciente.isSynced
-                                  ? Icon(Icons.cloud_done, color: Colors.green)
-                                  : Icon(Icons.cloud_off, color: Colors.orange),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
+                              SizedBox(height: 8),
+                              Text(
+                                'Haz clic en + para agregar un paciente',
+                                style: TextStyle(fontSize: 14, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: _pacientesFiltrados.length,
+                          itemBuilder: (context, index) {
+                            final paciente = _pacientesFiltrados[index];
+                            return Card(
+                              margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              child: ListTile(
+                                leading: Icon(Icons.person, color: Colors.blue),
+                                title: Text(paciente.nombre),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Cédula: ${paciente.cedula}'),
+                                    if (paciente.fechaNacimiento.isNotEmpty)
+                                      Text('Nacimiento: ${paciente.fechaNacimiento}'),
+                                    if (paciente.telefono != null)
+                                      Text('Tel: ${paciente.telefono}'),
+                                  ],
+                                ),
+                                trailing: paciente.isSynced
+                                    ? Icon(Icons.cloud_done, color: Colors.green)
+                                    : Icon(Icons.cloud_off, color: Colors.orange),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }

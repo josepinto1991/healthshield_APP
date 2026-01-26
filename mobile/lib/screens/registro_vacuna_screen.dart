@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/vacuna_service.dart';
 import '../models/vacuna.dart';
-import 'visualizar_registros_screen.dart'; // ← IMPORT AGREGADO
+import 'visualizar_registros_screen.dart';
 
 class RegistroVacunaScreen extends StatefulWidget {
   @override
@@ -103,16 +103,20 @@ class _RegistroVacunaScreenState extends State<RegistroVacunaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🔥 OBTENER PADDING INFERIOR SEGURO
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    
     return Scaffold(
       appBar: AppBar(
-        title:  Text(
-                    'HealthShield',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-              ),
+        title: Text(
+          'HealthShield',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue,
           ),
+        ),
         actions: [
           IconButton(
             icon: Icon(Icons.logout),
@@ -124,7 +128,13 @@ class _RegistroVacunaScreenState extends State<RegistroVacunaScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
+        // 🔥 PADDING DINÁMICO CON ESPACIO PARA BOTONES DEL DISPOSITIVO
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + bottomPadding + bottomInset,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -150,7 +160,7 @@ class _RegistroVacunaScreenState extends State<RegistroVacunaScreen> {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => VisualizarRegistrosScreen()), // ← CORREGIDO
+                        MaterialPageRoute(builder: (context) => VisualizarRegistrosScreen()),
                       );
                     },
                     child: Text(
@@ -312,8 +322,9 @@ class _RegistroVacunaScreenState extends State<RegistroVacunaScreen> {
                   
                   SizedBox(height: 32),
                   
-                  // Botón Guardar
-                  SizedBox(
+                  // 🔥 BOTÓN CON MARGEN DINÁMICO PARA EVITAR SUPERPOSICIÓN
+                  Container(
+                    margin: EdgeInsets.only(bottom: 24 + bottomPadding),
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
@@ -330,6 +341,9 @@ class _RegistroVacunaScreenState extends State<RegistroVacunaScreen> {
                           : Text('Guardar Registro', style: TextStyle(fontSize: 16)),
                     ),
                   ),
+                  
+                  // 🔥 ESPACIO EXTRA ADICIONAL CUANDO EL TECLADO ESTÁ VISIBLE
+                  SizedBox(height: bottomInset > 0 ? 60 : 24),
                 ],
               ),
             ),

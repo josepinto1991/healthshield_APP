@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,6 +28,9 @@ class MainMenuScreen extends StatelessWidget {
     final currentUser = authService.currentUser;
     final isAdmin = currentUser?.isAdmin ?? false;
     
+    // 🔥 OBTENER PADDING INFERIOR SEGURO
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -44,7 +46,6 @@ class MainMenuScreen extends StatelessWidget {
             IconButton(
               icon: Icon(Icons.admin_panel_settings, color: Colors.red),
               onPressed: () {
-                // Navegar al dashboard de admin
                 Navigator.pushNamed(context, '/admin-dashboard');
               },
               tooltip: 'Panel Administrativo',
@@ -292,23 +293,26 @@ class MainMenuScreen extends StatelessWidget {
             
             SizedBox(height: 16),
             
-            // Botón rápido para registrar vacuna
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/registro-vacuna');
-                },
-                icon: Icon(Icons.add, size: 20),
-                label: Text('Nuevo Registro de Vacuna'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            // 🔥 MODIFICADO: Botón con padding seguro
+            Container(
+              margin: EdgeInsets.only(bottom: 16 + bottomPadding), // 🔥 MARGEN DINÁMICO
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/registro-vacuna');
+                  },
+                  icon: Icon(Icons.add, size: 20),
+                  label: Text('Nuevo Registro de Vacuna'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
                   ),
-                  elevation: 2,
                 ),
               ),
             ),
