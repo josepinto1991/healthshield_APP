@@ -1,1 +1,0 @@
-web: BACKEND_DIR=$(find . -type f -name 'requirements.txt' -exec dirname {} \;) && cd "$BACKEND_DIR" && python3 -m pip install -r requirements.txt && gunicorn main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
