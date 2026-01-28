@@ -1,0 +1,23 @@
+[phases.setup]
+cmds = [
+  "echo '=== INICIANDO BUILD ==='",
+  "pwd",
+  "ls -la"
+]
+
+[phases.setup.deps]
+debian-packages = ["libpq-dev", "gcc", "python3-dev"]
+
+[phases.install]
+cmds = [
+  "BACKEND_DIR=$(find . -type f -name 'requirements.txt' -exec dirname {} \\; | head -1)",
+  "echo 'Backend encontrado en: $BACKEND_DIR'",
+  "cd \"$BACKEND_DIR\"",
+  "echo 'Instalando dependencias en:'",
+  "pwd",
+  "ls -la",
+  "pip install -r requirements.txt"
+]
+
+[start]
+cmd = "BACKEND_DIR=$(find /app -type f -name 'requirements.txt' -exec dirname {} \\; | head -1) && cd \"$BACKEND_DIR\" && gunicorn main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"

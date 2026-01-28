@@ -1,1 +1,1 @@
-web: cd healthshield_app/backend && gunicorn main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+web: cd $(find . -type f -name 'requirements.txt' -exec dirname {} \; | head -1) && gunicorn main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
