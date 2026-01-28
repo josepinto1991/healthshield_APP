@@ -2,10 +2,10 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "cd healthshield_app/backend && pip install -r requirements.txt"
+    "buildCommand": "if [ -f \"healthshield_app/backend/requirements.txt\" ]; then cd healthshield_app/backend && pip install -r requirements.txt; else find . -name 'requirements.txt' -exec dirname {} \\; | head -1 | xargs -I {} cd {} && pip install -r requirements.txt; fi"
   },
   "deploy": {
-    "startCommand": "cd healthshield_app/backend && gunicorn main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT",
+    "startCommand": "export PYTHONPATH=/app/healthshield_app/backend:$PYTHONPATH && gunicorn healthshield_app.backend.main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE"
   }
