@@ -1,0 +1,1 @@
+web: python -c "import os; print('🔍 DATABASE_URL:', 'PRESENTE' if os.environ.get('DATABASE_URL') else 'NO PRESENTE'); print('🚀 Iniciando API...')" && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-2}
