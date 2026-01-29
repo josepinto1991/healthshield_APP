@@ -5,20 +5,18 @@ WORKDIR /app
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     gcc \
-    g++ \
-    libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements primero para caching
+# Copiar requirements primero para cache
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código
+# Copiar el resto de la aplicación
 COPY . .
 
-# Exponer puerto
+# Puerto expuesto
 EXPOSE 8000
 
-# Comando de inicio simple
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Comando para ejecutar
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
