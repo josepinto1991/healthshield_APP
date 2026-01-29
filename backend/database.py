@@ -84,6 +84,7 @@
 #         print(f"❌ Error inicializando tablas: {e}")
 #         raise
 
+
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -97,124 +98,96 @@ logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
-# ==================== RAILWAY CONFIGURATION ====================
-
 def get_database_url():
     """
     Obtener URL de PostgreSQL para Railway.
-    EN RAILWAY, LA VARIABLE DATABASE_URL SE INYECTA AUTOMÁTICAMENTE.
+    Railway automáticamente inyecta DATABASE_URL.
     """
-    # DEBUG: Imprimir variables relevantes
-    print("🔍 BUSCANDO DATABASE_URL EN RAILWAY...")
+    # Railway siempre inyecta DATABASE_URL cuando se conecta a PostgreSQL
+    database_url = os.environ.get('DATABASE_URL')
     
-    # Lista de posibles nombres de variables que Railway podría usar
-    possible_db_vars = [
-        'DATABASE_URL',           # Railway estándar
-        'POSTGRES_URL',           # Alternativa
-        'POSTGRES_CONNECTION_STRING',
-        'RAILWAY_DATABASE_URL',
-        'DB_URL',
-        'POSTGRESQL_URL',
-    ]
-    
-    for var_name in possible_db_vars:
-        value = os.environ.get(var_name)
-        if value:
-            print(f"✅ ENCONTRADO: {var_name}")
-            print(f"   Valor: {value[:50]}..." if len(value) > 50 else f"   Valor: {value}")
-            
-            # Railway usa postgres://, SQLAlchemy necesita postgresql://
-            if value.startswith("postgres://"):
-                value = value.replace("postgres://", "postgresql://", 1)
-                print(f"   Convertido a: {value[:50]}..." if len(value) > 50 else f"   Convertido a: {value}")
-            
-            return value
-    
-    # Si no encontramos DATABASE_URL, es un error CRÍTICO en Railway
-    print("❌ ERROR CRÍTICO: DATABASE_URL NO ENCONTRADA EN RAILWAY")
-    print("🔍 Variables de entorno disponibles:")
-    for key, val in os.environ.items():
-        if 'DATABASE' in key or 'POSTGRES' in key or 'DB' in key or 'RAILWAY' in key:
-            safe_val = '***HIDDEN***' if any(s in key.lower() for s in ['pass', 'secret', 'key']) else val[:80]
-            print(f"   {key}: {safe_val}")
-    
-    # EN RAILWAY, NO USAR CREDENCIALES POR DEFECTO
-    # Esto asegura que falle claramente si no está configurado
-    raise RuntimeError(
-        "DATABASE_URL no encontrada en Railway. "
-        "Por favor, conecta el servicio PostgreSQL a tu API en Railway Dashboard: "
-        "1. Ve a PostgreSQL service → 'Connect' "
-        "2. Selecciona tu API service "
-        "3. Railway inyectará DATABASE_URL automáticamente"
-    )
-
-def create_engine_safe():
-    """
-    Crear engine de forma segura para Railway.
-    """
-    try:
-        database_url = get_database_url()
-        print(f"🔗 Conectando a PostgreSQL en Railway...")
+    if not database_url:
+        logger.error("❌ DATABASE_URL no encontrada en variables de entorno")
+        logger.info("ℹ️  Variables disponibles: " + ", ".join([k for k in os.environ.keys() if 'DATABASE' in k or 'POSTGRES' in k]))
         
-        # Configurar engine para Railway
-        engine = create_engine(
-            database_url,
-            echo=False,  # Desactivar en producción
-            pool_pre_ping=True,
-            pool_recycle=300,
-            pool_size=5,
-            max_overflow=10,
-            connect_args={
-                "connect_timeout": 10,
-                "keepalives": 1,
-                "keepalives_idle": 30,
-                "sslmode": "require" if "railway.app" in database_url else "prefer"
-            }
+        # Para Railway, si no hay DATABASE_URL, algo está mal configurado
+        raise ValueError(
+            "DATABASE_URL no encontrada. "
+            "En Railway, asegúrate de conectar el servicio PostgreSQL a tu API "
+            "o define las variables de conexión manualmente."
         )
-        
-        # Test de conexión
-        print("🔄 Probando conexión a PostgreSQL...")
-        with engine.connect() as conn:
-            result = conn.execute("SELECT version()")
-            version = result.scalar()
-            print(f"✅ PostgreSQL conectado: {version.split(',')[0]}")
-        
-        return engine
-        
-    except Exception as e:
-        print(f"❌ Error creando engine: {str(e)[:200]}")
-        
-        # En Railway, si no podemos conectar a la DB, creamos un engine dummy
-        # para que la app pueda iniciar (los endpoints de DB fallarán)
-        print("⚠️  Creando engine dummy (modo sin base de datos)")
-        return None
+    
+    logger.info(f"✅ DATABASE_URL encontrada: {database_url[:50]}...")
+    
+    # Railway usa postgres://, SQLAlchemy necesita postgresql://
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+        logger.info("✅ URL convertida a formato postgresql://")
+    
+    return database_url
 
-# ==================== GLOBAL ENGINE ====================
+def create_engine_with_retry(max_retries=10, initial_wait=3):
+    """Crear engine con reintentos para Railway"""
+    wait_time = initial_wait
+    
+    for attempt in range(max_retries):
+        try:
+            database_url = get_database_url()
+            
+            logger.info(f"🔄 Intento {attempt + 1}/{max_retries} de conexión a PostgreSQL...")
+            
+            engine = create_engine(
+                database_url,
+                echo=False,  # Desactivar en producción
+                pool_pre_ping=True,
+                pool_recycle=300,
+                pool_size=5,
+                max_overflow=10,
+                connect_args={
+                    "connect_timeout": 10,
+                    "keepalives": 1,
+                    "keepalives_idle": 30,
+                    "sslmode": "require" if "railway.app" in database_url else "prefer"
+                }
+            )
+            
+            # Test connection
+            with engine.connect() as conn:
+                result = conn.execute("SELECT version()")
+                version = result.scalar()
+                logger.info(f"✅ PostgreSQL conectado: {version.split(',')[0]}")
+            
+            return engine
+            
+        except Exception as e:
+            logger.warning(f"⚠️  Error en intento {attempt + 1}: {str(e)[:100]}...")
+            if attempt < max_retries - 1:
+                logger.info(f"⏳ Esperando {wait_time}s antes de reintentar...")
+                time.sleep(wait_time)
+                wait_time = min(wait_time * 1.5, 30)  # Backoff exponencial, max 30s
+            else:
+                logger.error(f"❌ Error conectando a PostgreSQL después de {max_retries} intentos")
+                logger.error("💡 Soluciones posibles:")
+                logger.error("1. Verifica que el servicio PostgreSQL esté 'Running' en Railway")
+                logger.error("2. En el servicio API, ve a 'Variables' y verifica DATABASE_URL")
+                logger.error("3. En el servicio PostgreSQL, haz clic en 'Connect' → 'API Service'")
+                raise
 
-# Intentar crear el engine
-engine = create_engine_safe()
-
-if engine is None:
-    print("⚠️  ADVERTENCIA: Engine no disponible. La aplicación iniciará sin base de datos.")
-    print("   Los endpoints que requieran DB mostrarán un error apropiado.")
-    SessionLocal = None
-else:
+# Inicializar engine
+try:
+    engine = create_engine_with_retry()
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    print("✅ SQLAlchemy configurado correctamente para Railway")
-
-# ==================== FUNCIONES PÚBLICAS ====================
+    logger.info("✅ SQLAlchemy engine y SessionLocal configurados")
+except Exception as e:
+    logger.critical(f"❌ No se pudo inicializar la base de datos: {e}")
+    # Crear engine dummy para desarrollo sin DB
+    engine = None
+    SessionLocal = None
 
 def get_db():
-    """
-    Dependencia para obtener sesión de base de datos.
-    """
+    """Dependencia para obtener sesión de base de datos"""
     if SessionLocal is None:
-        raise RuntimeError(
-            "Base de datos no disponible. "
-            "Por favor, verifica la conexión a PostgreSQL en Railway: "
-            "1. Conecta PostgreSQL a tu API service "
-            "2. Verifica que DATABASE_URL está configurada"
-        )
+        raise RuntimeError("Base de datos no inicializada. Verifica la conexión a PostgreSQL.")
     
     db = SessionLocal()
     try:
@@ -243,54 +216,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 def init_db():
-    """
-    Inicializar tablas en PostgreSQL.
-    Devuelve True si éxito, False si error.
-    """
+    """Inicializar tablas en PostgreSQL"""
+    from models import Usuario, Paciente, Vacuna
+    
     if engine is None:
-        print("❌ No se puede inicializar DB: engine no disponible")
+        logger.error("❌ Engine no disponible, no se pueden crear tablas")
         return False
     
     try:
-        from models import Usuario, Paciente, Vacuna
-        
-        print("🔄 Creando tablas en PostgreSQL...")
         Base.metadata.create_all(bind=engine)
-        print("✅ Tablas creadas/verificadas en PostgreSQL")
+        logger.info("✅ Tablas de PostgreSQL creadas/verificadas")
         return True
-        
     except Exception as e:
-        print(f"❌ Error inicializando base de datos: {e}")
+        logger.error(f"❌ Error inicializando base de datos: {e}")
         return False
-
-# ==================== DIAGNÓSTICO INICIAL ====================
-
-if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("DIAGNÓSTICO DE CONFIGURACIÓN RAILWAY")
-    print("="*60)
-    
-    # Mostrar información del entorno
-    print(f"Entorno: {os.environ.get('ENVIRONMENT', 'No definido')}")
-    print(f"RAILWAY_SERVICE_NAME: {os.environ.get('RAILWAY_SERVICE_NAME', 'No definido')}")
-    print(f"RAILWAY_ENVIRONMENT: {os.environ.get('RAILWAY_ENVIRONMENT', 'No definido')}")
-    
-    # Verificar DATABASE_URL
-    db_url = os.environ.get('DATABASE_URL')
-    if db_url:
-        print(f"✅ DATABASE_URL encontrada ({len(db_url)} caracteres)")
-        masked_url = db_url
-        if '@' in db_url:
-            # Enmascarar contraseña
-            parts = db_url.split('@')
-            user_pass = parts[0]
-            if ':' in user_pass:
-                user = user_pass.split(':')[0]
-                masked_url = f"{user}:***@{parts[1]}"
-        print(f"   URL: {masked_url[:80]}..." if len(masked_url) > 80 else f"   URL: {masked_url}")
-    else:
-        print("❌ DATABASE_URL NO ENCONTRADA")
-        print("   Railway no está inyectando la variable")
-        print("   Solución: Conecta PostgreSQL a tu API service")
-    
-    print("="*60)
