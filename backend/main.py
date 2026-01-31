@@ -1979,7 +1979,17 @@ async def test_no_db():
 if __name__ == "__main__":
     import uvicorn
     
-    port = int(os.environ.get("PORT", 8000))
+    # Obtener PORT desde entorno o usar 8000 por defecto
+    port_str = os.environ.get("PORT", "8000")
+    
+    # Asegurarse de que sea un entero
+    try:
+        port = int(port_str)
+    except ValueError:
+        print(f"⚠️  Warning: Invalid PORT '{port_str}', using 8000")
+        port = 8000
+    
+    print(f"🚀 Starting HealthShield API on port {port}")
     
     uvicorn.run(
         app,
