@@ -1043,7 +1043,6 @@
 #         port=port,
 #         log_level="info"
 #     )
-
 from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -1055,17 +1054,32 @@ from typing import List, Optional
 import logging
 from contextlib import asynccontextmanager
 
-from database import get_db, init_db, hash_password
-from models import (
-    UsuarioCreate, UsuarioResponse, UserLogin, AuthResponse,
-    PacienteCreate, PacienteResponse, PacienteUpdate,
-    VacunaCreate, VacunaResponse, VacunaUpdate,
-    MessageResponse, SyncResponse, BulkSyncData, BulkSyncResponse,
-    HealthCheck, Usuario, Paciente, Vacuna
-)
-from repositories import UsuarioRepository, PacienteRepository, VacunaRepository
+# ==================== DIAGNÓSTICO INICIAL RAILWAY ====================
+print("\n" + "="*60)
+print("🚀 HEALTHSHIELD API - RAILWAY DEPLOYMENT")
+print("="*60)
 
-# Configurar logging para Railway
+# Información crítica de Railway
+railway_info = {
+    "Environment": os.environ.get('RAILWAY_ENVIRONMENT', 'Not set'),
+    "Service": os.environ.get('RAILWAY_SERVICE_NAME', 'Not set'),
+    "Service ID": os.environ.get('RAILWAY_SERVICE_ID', 'Not set'),
+    "Database URL": "✅ PRESENT" if os.environ.get('DATABASE_URL') else "❌ MISSING",
+}
+
+for key, value in railway_info.items():
+    print(f"📊 {key}: {value}")
+
+# Variables PostgreSQL (alternativas a DATABASE_URL)
+pg_vars = ['PGHOST', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD']
+pg_found = [var for var in pg_vars if os.environ.get(var)]
+
+if pg_found:
+    print(f"📊 PostgreSQL vars found: {', '.join(pg_found)}")
+
+print("="*60 + "\n")
+
+# Configurar logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -1073,17 +1087,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Solo cargar .env en desarrollo local
-if os.environ.get('ENVIRONMENT') != 'production':
+# En Railway, todas las variables vienen del entorno
+if os.environ.get('RAILWAY_ENVIRONMENT') is None:
     load_dotenv()
-    logger.info("✅ Modo desarrollo: .env cargado")
+    logger.info("✅ Modo desarrollo local: .env cargado")
 else:
-    logger.info("✅ Modo producción: usando variables de Railway")
+    logger.info("✅ Modo Railway: usando variables del entorno")
 
-# Configuración de JWT
+# ==================== CONFIGURACIÓN ====================
+
+# Configuración de JWT para Railway
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
-    logger.warning("⚠️  SECRET_KEY no definida, usando valor por defecto (inseguro en producción)")
-    SECRET_KEY = "healthshield_secret_key_dev"
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        logger.error("❌ SECRET_KEY no definida en Railway")
+        # En producción, usar valor por defecto es peligroso
+        SECRET_KEY = "railway_temp_secret_change_in_production"
+        logger.warning("⚠️  Usando secreto temporal - CAMBIAR EN PRODUCCIÓN")
+    else:
+        SECRET_KEY = "healthshield_secret_key_dev"
+        logger.info("✅ Usando secreto de desarrollo")
 
 ALGORITHM = "HS256"
 
@@ -1091,6 +1114,27 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+# Importar después del diagnóstico
+try:
+    from database import get_db, init_db, hash_password
+    from models import (
+        UsuarioCreate, UsuarioResponse, UserLogin, AuthResponse,
+        PacienteCreate, PacienteResponse, PacienteUpdate,
+        VacunaCreate, VacunaResponse, VacunaUpdate,
+        MessageResponse, SyncResponse, BulkSyncData, BulkSyncResponse,
+        HealthCheck, Usuario, Paciente, Vacuna
+    )
+    from repositories import UsuarioRepository, PacienteRepository, VacunaRepository
+    logger.info("✅ Módulos importados correctamente")
+except Exception as e:
+    logger.error(f"❌ Error importando módulos: {e}")
+    # Definir funciones dummy para que la app pueda iniciar
+    get_db = None
+    init_db = lambda: False
+    logger.warning("⚠️  Usando funciones dummy - algunos endpoints no funcionarán")
+
+# ==================== LIFESPAN (MODIFICADO PARA RAILWAY) ====================
 
 def create_default_admin(db: Session):
     """Crear usuario admin por defecto si no existe"""
@@ -1120,26 +1164,38 @@ def create_default_admin(db: Session):
         
     except Exception as e:
         logger.error(f"❌ Error creando usuario admin: {e}")
-        db.rollback()
+        if db:
+            db.rollback()
         return False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    logger.info("🚀 Iniciando HealthShield API en Railway...")
+    # Startup - optimizado para Railway
+    logger.info("🚀 Iniciando HealthShield API...")
     
-    # Inicializar base de datos
-    db_initialized = init_db()
-    
-    if db_initialized:
-        try:
-            db = next(get_db())
-            create_default_admin(db)
+    # Inicializar base de datos (manejar errores graciosamente)
+    try:
+        db_initialized = init_db()
+        if db_initialized:
             logger.info("✅ Base de datos inicializada correctamente")
-        except Exception as e:
-            logger.error(f"⚠️  Error inicializando datos: {e}")
-    else:
-        logger.warning("⚠️  Base de datos no inicializada, algunos endpoints no funcionarán")
+            
+            # Intentar crear admin si DB está disponible
+            try:
+                if get_db:
+                    db = next(get_db())
+                    create_default_admin(db)
+                    logger.info("✅ Usuario admin verificado/creado")
+                else:
+                    logger.warning("⚠️  get_db no disponible, no se puede crear admin")
+            except Exception as e:
+                logger.warning(f"⚠️  No se pudo crear admin: {e}")
+        else:
+            logger.warning("⚠️  Base de datos NO inicializada")
+            logger.info("💡 La API funcionará en modo limitado")
+            
+    except Exception as e:
+        logger.error(f"❌ Error en inicialización: {e}")
+        logger.info("💡 La API iniciará en modo de recuperación")
     
     logger.info("✅ HealthShield API lista para recibir peticiones")
     yield
@@ -1147,20 +1203,26 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("🛑 Deteniendo HealthShield API...")
 
-# Configurar CORS para Railway
+# ==================== CONFIGURACIÓN CORS PARA RAILWAY ====================
+
 allowed_origins_str = os.environ.get("ALLOWED_ORIGINS", "")
 if allowed_origins_str:
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 else:
-    # Por defecto en Railway, permitir los comunes
+    # Valores por defecto seguros para Railway
     allowed_origins = [
         "http://localhost:3000",
         "http://localhost:8080",
         "http://localhost",
-        "https://healthshield-app.vercel.app",  # Ejemplo de frontend
+        "https://healthshield.vercel.app",  # Ejemplo
+        os.environ.get('RAILWAY_STATIC_URL', ''),  # URL estática de Railway si existe
     ]
+    # Filtrar valores vacíos
+    allowed_origins = [origin for origin in allowed_origins if origin]
 
 logger.info(f"🌐 CORS configurado para orígenes: {allowed_origins}")
+
+# ==================== APLICACIÓN FASTAPI ====================
 
 app = FastAPI(
     title="HealthShield API",
@@ -1179,12 +1241,135 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== ENDPOINTS DE AUTENTICACIÓN ====================
+# ==================== ENDPOINTS DE DIAGNÓSTICO RAILWAY ====================
+
+@app.get("/", response_model=HealthCheck)
+async def root():
+    """Endpoint raíz - Información de Railway"""
+    return HealthCheck(
+        status="healthy",
+        timestamp=datetime.now().isoformat(),
+        environment=os.environ.get('RAILWAY_ENVIRONMENT', 'development'),
+        database="PostgreSQL (Railway)" if os.environ.get('DATABASE_URL') else "Not connected",
+        metrics={
+            "railway_service": os.environ.get('RAILWAY_SERVICE_NAME', 'unknown'),
+            "service_id": os.environ.get('RAILWAY_SERVICE_ID', 'unknown'),
+            "deployment_id": os.environ.get('RAILWAY_DEPLOYMENT_ID', 'unknown')
+        }
+    )
+
+@app.get("/health", response_model=HealthCheck)
+async def health_check():
+    """Health check para Railway"""
+    db_status = "unknown"
+    
+    try:
+        if get_db:
+            db = next(get_db())
+            db.execute('SELECT 1')
+            db_status = "connected"
+            
+            # Contar registros si es posible
+            try:
+                pacientes_count = db.query(Paciente).count()
+                vacunas_count = db.query(Vacuna).count()
+                usuarios_count = db.query(Usuario).count()
+                counts = {
+                    "pacientes_count": pacientes_count,
+                    "vacunas_count": vacunas_count,
+                    "usuarios_count": usuarios_count
+                }
+            except:
+                counts = {}
+        else:
+            db_status = "get_db_not_available"
+            counts = {}
+            
+    except Exception as e:
+        db_status = f"error: {str(e)[:100]}"
+        counts = {}
+    
+    return HealthCheck(
+        status="healthy" if "connected" in db_status else "degraded",
+        timestamp=datetime.now().isoformat(),
+        environment=os.environ.get('RAILWAY_ENVIRONMENT', 'development'),
+        database=db_status,
+        metrics=counts
+    )
+
+@app.get("/api/railway/diagnostics")
+async def railway_diagnostics():
+    """Diagnóstico completo de Railway"""
+    # Información de entorno
+    env_vars = {}
+    for key, value in os.environ.items():
+        if any(kw in key.lower() for kw in ['railway', 'database', 'pg', 'db', 'secret', 'key']):
+            # Enmascarar valores sensibles
+            if any(s in key.lower() for s in ['pass', 'secret', 'key', 'token']):
+                env_vars[key] = "***HIDDEN***"
+            elif 'DATABASE_URL' in key and value:
+                # Mostrar DATABASE_URL de forma segura
+                if '@' in value:
+                    parts = value.split('@')
+                    user_part = parts[0]
+                    if ':' in user_part:
+                        user = user_part.split(':')[0]
+                        env_vars[key] = f"{user}:***@{parts[1][:50]}..."
+                    else:
+                        env_vars[key] = f"{value[:50]}..."
+                else:
+                    env_vars[key] = f"{value[:50]}..."
+            else:
+                env_vars[key] = value
+    
+    # Verificar estado de la base de datos
+    db_status = {
+        "database_url_present": bool(os.environ.get('DATABASE_URL')),
+        "postgres_vars_present": bool([v for v in ['PGHOST', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD'] if os.environ.get(v)]),
+        "connection_test": "not_attempted"
+    }
+    
+    # Intentar conexión a la base de datos
+    try:
+        if get_db:
+            db = next(get_db())
+            result = db.execute("SELECT version()")
+            db_version = result.scalar()
+            db_status["connection_test"] = f"success: {db_version.split(',')[0]}"
+        else:
+            db_status["connection_test"] = "get_db_not_available"
+    except Exception as e:
+        db_status["connection_test"] = f"error: {str(e)[:100]}"
+    
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "railway": {
+            "environment": os.environ.get('RAILWAY_ENVIRONMENT'),
+            "service_name": os.environ.get('RAILWAY_SERVICE_NAME'),
+            "service_id": os.environ.get('RAILWAY_SERVICE_ID'),
+            "static_url": os.environ.get('RAILWAY_STATIC_URL'),
+            "deployment_id": os.environ.get('RAILWAY_DEPLOYMENT_ID')
+        },
+        "database": db_status,
+        "environment_variables": env_vars,
+        "system": {
+            "python_version": os.sys.version,
+            "cwd": os.getcwd(),
+            "pid": os.getpid()
+        }
+    }
+
+# ==================== ENDPOINTS DE AUTENTICACIÓN (CON MANEJO DE ERRORES) ====================
 
 @app.post("/api/auth/register", response_model=AuthResponse, status_code=201)
-async def register(usuario: UsuarioCreate, db: Session = Depends(get_db)):
+async def register(usuario: UsuarioCreate):
     """Registrar un nuevo usuario"""
     try:
+        if not get_db:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        db = next(get_db())
+        
         if UsuarioRepository.get_by_username(db, usuario.username):
             raise HTTPException(status_code=400, detail="El usuario ya existe")
         
@@ -1214,7 +1399,9 @@ async def register(usuario: UsuarioCreate, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Error en registro: {e}")
-        raise HTTPException(status_code=500, detail="Error interno del servidor")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
 
 @app.post("/api/auth/login", response_model=AuthResponse)
 async def login(login_data: UserLogin, db: Session = Depends(get_db)):
@@ -1771,15 +1958,23 @@ async def test_db():
             }
         }
 
-@app.get("/api/test/echo")
-async def test_echo(message: str = "Hello Railway!"):
-    """Endpoint de prueba simple"""
+
+# ==================== ENDPOINT DE PRUEBA SIN DB ====================
+
+@app.get("/api/test/no-db")
+async def test_no_db():
+    """Endpoint que funciona sin base de datos"""
     return {
-        "message": message,
+        "status": "ok",
+        "message": "Este endpoint funciona sin base de datos",
         "timestamp": datetime.now().isoformat(),
-        "environment": os.environ.get('ENVIRONMENT', 'unknown'),
-        "service": os.environ.get('RAILWAY_SERVICE_NAME', 'unknown')
+        "railway": {
+            "environment": os.environ.get('RAILWAY_ENVIRONMENT'),
+            "service": os.environ.get('RAILWAY_SERVICE_NAME')
+        }
     }
+
+# ==================== MAIN EXECUTION ====================
 
 if __name__ == "__main__":
     import uvicorn
