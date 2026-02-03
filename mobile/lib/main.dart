@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -22,9 +21,15 @@ import 'package:healthshield/screens/change_password_screen.dart';
 import 'package:healthshield/screens/admin_dashboard_screen.dart';
 import 'package:healthshield/screens/admin_usuarios_screen.dart';
 import 'package:healthshield/screens/gestion_pacientes_screen.dart';
+import 'package:healthshield/screens/paciente_detalle_screen.dart'; // NUEVO
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 🔥 DESHABILITAR ANIMACIONES LENTAS
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Optimizar para reducir lag
+  });
   
   print('🚀 Inicializando HealthShield...');
   
@@ -81,6 +86,13 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             title: 'HealthShield',
             debugShowCheckedModeBanner: false,
+            
+            // 🔥 OPTIMIZACIONES DE RENDIMIENTO
+            scrollBehavior: const MaterialScrollBehavior().copyWith(
+              physics: const BouncingScrollPhysics(),
+              scrollbars: false,
+            ),
+            
             theme: ThemeData(
               primarySwatch: Colors.blue,
               visualDensity: VisualDensity.adaptivePlatformDensity,
@@ -90,12 +102,18 @@ class MyApp extends StatelessWidget {
                 elevation: 1,
                 centerTitle: true,
               ),
+              // 🔥 TRANSICIONES MÁS RÁPIDAS
+              pageTransitionsTheme: PageTransitionsTheme(
+                builders: {
+                  TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+                  TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                },
+              ),
             ),
             
             // Ruta inicial
             initialRoute: '/welcome',
-            
-            // Configuración de rutas nombradas
+
             routes: {
               // Pantallas de autenticación (acceso público)
               '/welcome': (context) => WelcomeScreen(),
@@ -114,10 +132,36 @@ class MyApp extends StatelessWidget {
               '/change-password': (context) => _buildProtectedScreen(ChangePasswordScreen(), context),
               '/gestion-pacientes': (context) => _buildProtectedScreen(GestionPacientesScreen(), context),
               
+              // Nueva pantalla de detalles del paciente
+              '/paciente-detalle': (context) {
+                // Manejo seguro de argumentos
+                final args = ModalRoute.of(context)?.settings.arguments;
+                
+                if (args != null && args is Map<String, dynamic>) {
+                  return _buildProtectedScreen(
+                    PacienteDetalleScreen(
+                      cedula: args['cedula']?.toString() ?? '',
+                      nombre: args['nombre']?.toString() ?? 'Paciente',
+                    ), 
+                    context
+                  );
+                }
+                
+                // Si no hay argumentos válidos, mostrar pantalla vacía
+                return _buildProtectedScreen(
+                  PacienteDetalleScreen(
+                    cedula: '',
+                    nombre: 'Paciente no especificado',
+                  ), 
+                  context
+                );
+              },
+              
               // Pantallas de admin (solo para administradores)
               '/admin-dashboard': (context) => _buildAdminProtectedScreen(AdminDashboardScreen(), context),
               '/admin-usuarios': (context) => _buildAdminProtectedScreen(AdminUsuariosScreen(), context),
             },
+            
             
             // Manejo de rutas no definidas
             onUnknownRoute: (settings) {
@@ -130,6 +174,8 @@ class MyApp extends StatelessWidget {
       ),
     );
   }
+  
+ 
   
   // Función para proteger pantallas que requieren autenticación
   Widget _buildProtectedScreen(Widget screen, BuildContext context) {
