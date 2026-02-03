@@ -3,7 +3,7 @@ import 'package:path/path.dart';
 
 class DatabaseHelper {
   static const _databaseName = 'healthshield_cache.db';
-  static const _databaseVersion = 5; // ✅ Cambiar de 4 a 5
+  static const _databaseVersion = 7; // ✅ Versión incrementada a 7
 
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
@@ -78,13 +78,13 @@ class DatabaseHelper {
       )
     ''');
 
-    // ✅ TABLA VACUNAS ACTUALIZADA
+    // ✅ TABLA VACUNAS COMPLETA CON TODAS LAS COLUMNAS
     await db.execute('''
       CREATE TABLE IF NOT EXISTS vacunas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         server_id INTEGER,
-        paciente_id INTEGER, -- Cambiado a opcional
-        paciente_server_id INTEGER, -- ✅ Agregada
+        paciente_id INTEGER,
+        paciente_server_id INTEGER,
         nombre_vacuna TEXT NOT NULL,
         fecha_aplicacion TEXT NOT NULL,
         lote TEXT,
@@ -94,8 +94,11 @@ class DatabaseHelper {
         last_sync TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
-        nombre_paciente TEXT, -- ✅ AGREGADA
-        cedula_paciente TEXT -- ✅ AGREGADA
+        nombre_paciente TEXT,
+        cedula_paciente TEXT,
+        es_menor BOOLEAN DEFAULT FALSE,
+        cedula_tutor TEXT,
+        cedula_propia TEXT
       )
     ''');
 
@@ -159,7 +162,13 @@ class DatabaseHelper {
         await _migrateToVersion4(db);
         break;
       case 5:
-        await _migrateToVersion5(db); // ✅ NUEVA MIGRACIÓN
+        await _migrateToVersion5(db);
+        break;
+      case 6:
+        await _migrateToVersion6(db);
+        break;
+      case 7:
+        await _migrateToVersion7(db); // ✅ NUEVA MIGRACIÓN
         break;
     }
   }
@@ -220,12 +229,10 @@ class DatabaseHelper {
     }
   }
 
-  // ✅ NUEVA MIGRACIÓN PARA VERSIÓN 5
   Future<void> _migrateToVersion5(Database db) async {
     try {
       print('🔄 Actualizando tabla vacunas...');
       
-      // Agregar columnas faltantes a tabla vacunas
       try {
         await db.execute('ALTER TABLE vacunas ADD COLUMN nombre_paciente TEXT');
         print('✅ Agregada columna nombre_paciente a tabla vacunas');
@@ -247,17 +254,89 @@ class DatabaseHelper {
         print('ℹ️ Columna paciente_server_id ya existe: $e');
       }
       
-      // Cambiar paciente_id a opcional si no lo es ya
-      try {
-        // No hay ALTER para cambiar NOT NULL, así que manejaremos en la lógica
-        print('ℹ️ paciente_id se manejará como opcional en la lógica');
-      } catch (e) {
-        print('ℹ️ No se pudo modificar paciente_id: $e');
-      }
-      
       print('✅ Migración a versión 5 completada');
     } catch (e) {
       print('❌ Error en migración a versión 5: $e');
+    }
+  }
+
+  Future<void> _migrateToVersion6(Database db) async {
+    try {
+      // Migración para versión 6 (si existe)
+      print('🔄 Migrando a versión 6');
+    } catch (e) {
+      print('❌ Error en migración a versión 6: $e');
+    }
+  }
+
+  Future<void> _migrateToVersion7(Database db) async {
+    try {
+      print('🔄 Migrando a versión 7 - Agregando campos niño/adulto a vacunas');
+      
+      try {
+        await db.execute('ALTER TABLE vacunas ADD COLUMN es_menor BOOLEAN DEFAULT FALSE');
+        print('✅ Agregada columna es_menor a tabla vacunas');
+      } catch (e) {
+        print('ℹ️ Columna es_menor ya existe: $e');
+      }
+      
+      try {
+        await db.execute('ALTER TABLE vacunas ADD COLUMN cedula_tutor TEXT');
+        print('✅ Agregada columna cedula_tutor a tabla vacunas');
+      } catch (e) {
+        print('ℹ️ Columna cedula_tutor ya existe: $e');
+      }
+      
+      try {
+        await db.execute('ALTER TABLE vacunas ADD COLUMN cedula_propia TEXT');
+        print('✅ Agregada columna cedula_propia a tabla vacunas');
+      } catch (e) {
+        print('ℹ️ Columna cedula_propia ya existe: $e');
+      }
+      
+      print('✅ Migración a versión 7 completada');
+    } catch (e) {
+      print('❌ Error en migración a versión 7: $e');
+    }
+  }
+
+  // ✅ NUEVO: Método para verificar y agregar columnas faltantes al abrir la BD
+  Future<void> verificarColumnasVacunas() async {
+    final db = await database;
+    try {
+      print('🔍 Verificando columnas de tabla vacunas...');
+      
+      final tablaInfo = await db.rawQuery('PRAGMA table_info(vacunas)');
+      final columnasExistentes = tablaInfo.map((col) => col['name'] as String).toList();
+      
+      print('📋 Columnas existentes en vacunas: $columnasExistentes');
+      
+      // Lista de columnas requeridas
+      final columnasRequeridas = [
+        'es_menor',
+        'cedula_tutor', 
+        'cedula_propia'
+      ];
+      
+      for (var columna in columnasRequeridas) {
+        if (!columnasExistentes.contains(columna)) {
+          print('➕ Agregando columna $columna a tabla vacunas...');
+          try {
+            if (columna == 'es_menor') {
+              await db.execute('ALTER TABLE vacunas ADD COLUMN es_menor BOOLEAN DEFAULT FALSE');
+            } else {
+              await db.execute('ALTER TABLE vacunas ADD COLUMN $columna TEXT');
+            }
+            print('✅ Columna $columna agregada');
+          } catch (e) {
+            print('❌ Error agregando columna $columna: $e');
+          }
+        } else {
+          print('ℹ️ Columna $columna ya existe');
+        }
+      }
+    } catch (e) {
+      print('❌ Error verificando columnas: $e');
     }
   }
 
@@ -274,12 +353,11 @@ class DatabaseHelper {
     final tablas = ['usuarios', 'pacientes', 'vacunas'];
     
     for (var tabla in tablas) {
-      print('📋 Estructura de tabla $tabla:');
+      print('\n📋 Estructura de tabla $tabla:');
       final info = await db.rawQuery('PRAGMA table_info($tabla)');
       for (var col in info) {
         print('  ${col['name']} (${col['type']}) - PK: ${col['pk']} - NotNull: ${col['notnull']}');
       }
-      print('');
     }
   }
 

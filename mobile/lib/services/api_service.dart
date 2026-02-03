@@ -25,6 +25,25 @@ class ApiService {
     }
   }
   
+  // ✅ MÉTODO MEJORADO PARA VERIFICAR CONEXIÓN
+  Future<bool> checkServerStatus() async {
+    try {
+      print('🌐 Verificando conexión con servidor: $baseUrl');
+      final response = await http.get(
+        Uri.parse('$baseUrl/health'),
+        headers: headers,
+      ).timeout(Duration(seconds: 10));
+      
+      final isConnected = response.statusCode == 200;
+      print(isConnected ? '✅ Servidor disponible' : '❌ Servidor no responde');
+      return isConnected;
+    } catch (e) {
+      print('⚠️ No se puede conectar al servidor: $e');
+      print('💡 URL intentada: $baseUrl/health');
+      return false;
+    }
+  }
+  
   // ========== VERIFICACIÓN SIMULADA DE PROFESIONALES ==========
   Future<Map<String, dynamic>> verifyProfessional(String cedula) async {
     try {
@@ -95,21 +114,6 @@ class ApiService {
         },
         'message': 'Error de conexión - Registro offline permitido',
       };
-    }
-  }
-
-  // ========== VERIFICAR CONEXIÓN ==========
-  Future<bool> checkServerStatus() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/health'),
-        headers: headers,
-      ).timeout(Duration(seconds: 10));
-      
-      return response.statusCode == 200;
-    } catch (e) {
-      print('⚠️ Servidor no disponible: $e');
-      return false; // Devuelve false para indicar que no hay conexión
     }
   }
 

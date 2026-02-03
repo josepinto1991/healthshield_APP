@@ -8,6 +8,9 @@ import 'package:healthshield/services/auth_service.dart';
 import 'package:healthshield/services/vacuna_service.dart';
 import 'package:healthshield/services/paciente_service.dart';
 import 'package:healthshield/services/api_service.dart';
+import 'package:healthshield/services/bidirectional_sync_service.dart';
+import 'package:healthshield/services/sync_service.dart';
+import 'package:healthshield/services/user_sync_service.dart';
 
 // Screens
 import 'package:healthshield/screens/welcome_screen.dart';
@@ -21,7 +24,7 @@ import 'package:healthshield/screens/change_password_screen.dart';
 import 'package:healthshield/screens/admin_dashboard_screen.dart';
 import 'package:healthshield/screens/admin_usuarios_screen.dart';
 import 'package:healthshield/screens/gestion_pacientes_screen.dart';
-import 'package:healthshield/screens/paciente_detalle_screen.dart'; // NUEVO
+import 'package:healthshield/screens/paciente_detalle_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -73,6 +76,38 @@ class MyApp extends StatelessWidget {
         ),
         Provider(
           create: (context) => PacienteService(),
+        ),
+        // ✅ AGREGAR BIDIRECTIONALSYNCSERVICE
+        Provider(
+          create: (context) {
+            final cacheService = context.read<CacheService>();
+            final apiService = context.read<ApiService>();
+            return BidirectionalSyncService(
+              cacheService: cacheService,
+              apiService: apiService,
+            );
+          },
+        ),
+        // ✅ AGREGAR SYNC SERVICE Y USER SYNC SERVICE
+        Provider(
+          create: (context) {
+            final vacunaService = context.read<VacunaService>();
+            final apiService = context.read<ApiService>();
+            return SyncService(
+              vacunaService: vacunaService,
+              apiService: apiService,
+            );
+          },
+        ),
+        Provider(
+          create: (context) {
+            final cacheService = context.read<CacheService>();
+            final apiService = context.read<ApiService>();
+            return UserSyncService(
+              cacheService: cacheService,
+              apiService: apiService,
+            );
+          },
         ),
       ],
       child: Builder(
@@ -162,7 +197,6 @@ class MyApp extends StatelessWidget {
               '/admin-usuarios': (context) => _buildAdminProtectedScreen(AdminUsuariosScreen(), context),
             },
             
-            
             // Manejo de rutas no definidas
             onUnknownRoute: (settings) {
               return MaterialPageRoute(
@@ -174,8 +208,6 @@ class MyApp extends StatelessWidget {
       ),
     );
   }
-  
- 
   
   // Función para proteger pantallas que requieren autenticación
   Widget _buildProtectedScreen(Widget screen, BuildContext context) {

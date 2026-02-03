@@ -4,7 +4,7 @@ import '../models/vacuna.dart';
 
 class VacunaService {
   static const _databaseName = 'healthshield_vacunas.db';
-  static const _databaseVersion = 3; // ✅ Cambiar de 2 a 3
+  static const _databaseVersion = 4; // ✅ Cambiar de 3 a 4 para nueva versión
 
   Database? _database;
 
@@ -20,8 +20,50 @@ class VacunaService {
       path,
       version: _databaseVersion,
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade, // ✅ Agregar onUpgrade para migraciones
+      onUpgrade: _onUpgrade,
+      onOpen: (db) async {
+        // ✅ VERIFICAR COLUMNAS FALTANTES AL ABRIR LA BD
+        await _verificarColumnasFaltantes(db);
+      },
     );
+  }
+
+  Future<void> _verificarColumnasFaltantes(Database db) async {
+    try {
+      print('🔍 Verificando columnas faltantes en tabla vacunas...');
+      
+      final tablaInfo = await db.rawQuery('PRAGMA table_info(vacunas)');
+      final columnasExistentes = tablaInfo.map((col) => col['name'] as String).toList();
+      
+      print('📋 Columnas existentes: $columnasExistentes');
+      
+      // Lista de columnas requeridas
+      final columnasRequeridas = [
+        'es_menor',
+        'cedula_tutor', 
+        'cedula_propia'
+      ];
+      
+      for (var columna in columnasRequeridas) {
+        if (!columnasExistentes.contains(columna)) {
+          print('➕ Agregando columna $columna a tabla vacunas...');
+          try {
+            if (columna == 'es_menor') {
+              await db.execute('ALTER TABLE vacunas ADD COLUMN es_menor BOOLEAN DEFAULT FALSE');
+            } else {
+              await db.execute('ALTER TABLE vacunas ADD COLUMN $columna TEXT');
+            }
+            print('✅ Columna $columna agregada');
+          } catch (e) {
+            print('❌ Error agregando columna $columna: $e');
+          }
+        } else {
+          print('ℹ️ Columna $columna ya existe');
+        }
+      }
+    } catch (e) {
+      print('❌ Error verificando columnas: $e');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -29,8 +71,8 @@ class VacunaService {
       CREATE TABLE vacunas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         server_id INTEGER,
-        paciente_id INTEGER, -- Cambiado a opcional
-        paciente_server_id INTEGER, -- ✅ Agregada esta columna
+        paciente_id INTEGER,
+        paciente_server_id INTEGER,
         nombre_vacuna TEXT NOT NULL,
         fecha_aplicacion TEXT NOT NULL,
         lote TEXT,
@@ -39,38 +81,41 @@ class VacunaService {
         is_synced INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT,
-        nombre_paciente TEXT, -- ✅ AGREGADA
-        cedula_paciente TEXT  -- ✅ AGREGADA
+        nombre_paciente TEXT,
+        cedula_paciente TEXT,
+        es_menor BOOLEAN DEFAULT FALSE, -- ✅ COLUMNA AGREGADA
+        cedula_tutor TEXT, -- ✅ COLUMNA AGREGADA
+        cedula_propia TEXT -- ✅ COLUMNA AGREGADA
       )
     ''');
-    print('✅ Tabla vacunas creada con columnas adicionales');
+    print('✅ Tabla vacunas creada con todas las columnas (incluyendo es_menor)');
   }
 
   // ✅ Nuevo método para manejar migraciones
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     print('🔄 Actualizando tabla vacunas de versión $oldVersion a $newVersion');
     
-    if (oldVersion < 3) {
-      // Agregar columnas faltantes si vienen de versión anterior
+    // Si viene de versión anterior a 4, agregar columnas nuevas
+    if (oldVersion < 4) {
       try {
-        await db.execute('ALTER TABLE vacunas ADD COLUMN nombre_paciente TEXT');
-        print('✅ Columna nombre_paciente agregada');
+        await db.execute('ALTER TABLE vacunas ADD COLUMN es_menor BOOLEAN DEFAULT FALSE');
+        print('✅ Columna es_menor agregada');
       } catch (e) {
-        print('ℹ️ Columna nombre_paciente ya existe: $e');
+        print('ℹ️ Columna es_menor ya existe: $e');
       }
       
       try {
-        await db.execute('ALTER TABLE vacunas ADD COLUMN cedula_paciente TEXT');
-        print('✅ Columna cedula_paciente agregada');
+        await db.execute('ALTER TABLE vacunas ADD COLUMN cedula_tutor TEXT');
+        print('✅ Columna cedula_tutor agregada');
       } catch (e) {
-        print('ℹ️ Columna cedula_paciente ya existe: $e');
+        print('ℹ️ Columna cedula_tutor ya existe: $e');
       }
       
       try {
-        await db.execute('ALTER TABLE vacunas ADD COLUMN paciente_server_id INTEGER');
-        print('✅ Columna paciente_server_id agregada');
+        await db.execute('ALTER TABLE vacunas ADD COLUMN cedula_propia TEXT');
+        print('✅ Columna cedula_propia agregada');
       } catch (e) {
-        print('ℹ️ Columna paciente_server_id ya existe: $e');
+        print('ℹ️ Columna cedula_propia ya existe: $e');
       }
     }
   }
@@ -79,9 +124,12 @@ class VacunaService {
   Future<void> init() async {
     await database;
     print('✅ VacunaService inicializado correctamente');
+    
+    // ✅ Verificar estructura después de inicializar
+    await verificarEstructuraTabla();
   }
 
-  // Crear vacuna - MÉTODO CORREGIDO
+  // Crear vacuna - MÉTODO ACTUALIZADO CON TODOS LOS CAMPOS
   Future<int> crearVacuna(Vacuna vacuna) async {
     final db = await database;
     
@@ -102,17 +150,34 @@ class VacunaService {
         'updated_at': vacuna.updatedAt?.toIso8601String(),
         'nombre_paciente': vacuna.nombrePaciente?.isNotEmpty == true ? vacuna.nombrePaciente : null,
         'cedula_paciente': vacuna.cedulaPaciente?.isNotEmpty == true ? vacuna.cedulaPaciente : null,
+        // ✅ AGREGAR LOS NUEVOS CAMPOS
+        'es_menor': vacuna.esMenor ? 1 : 0,
+        'cedula_tutor': vacuna.cedulaTutor,
+        'cedula_propia': vacuna.cedulaPropia,
       };
       
       // Eliminar valores null del mapa para usar solo columnas existentes
       vacunaData.removeWhere((key, value) => value == null);
       
-      print('📝 Insertando vacuna: $vacunaData');
+      // ✅ LOG DETALLADO PARA DEPURACIÓN
+      print('📝 Insertando vacuna:');
+      print('  Nombre: ${vacuna.nombrePaciente}');
+      print('  Cédula: ${vacuna.cedulaPaciente}');
+      print('  Es Menor: ${vacuna.esMenor}');
+      print('  Cédula Tutor: ${vacuna.cedulaTutor}');
+      print('  Cédula Propia: ${vacuna.cedulaPropia}');
+      print('  Datos a insertar: $vacunaData');
+      
       final id = await db.insert('vacunas', vacunaData);
       print('✅ Vacuna insertada con ID: $id');
       return id;
     } catch (e) {
       print('❌ Error insertando vacuna: $e');
+      
+      // ✅ INTENTAR VERIFICAR ESTRUCTURA SI HAY ERROR
+      print('🔄 Intentando verificar estructura de tabla...');
+      await verificarEstructuraTabla();
+      
       rethrow;
     }
   }
@@ -172,6 +237,13 @@ class VacunaService {
       orderBy: 'fecha_aplicacion DESC'
     );
     print('🔍 Buscando por cédula "$cedula": ${results.length} resultados');
+    
+    // ✅ LOG DETALLADO DE LOS RESULTADOS
+    for (var i = 0; i < results.length; i++) {
+      final vacuna = Vacuna.fromJson(results[i]);
+      print('  Resultado ${i + 1}: ${vacuna.nombrePaciente} - Es Menor: ${vacuna.esMenor}');
+    }
+    
     return results.map((json) => Vacuna.fromJson(json)).toList();
   }
 
@@ -192,9 +264,84 @@ class VacunaService {
   Future<void> verificarEstructuraTabla() async {
     final db = await database;
     final tablaInfo = await db.rawQuery('PRAGMA table_info(vacunas)');
-    print('📋 Estructura de tabla vacunas:');
+    print('\n📋 Estructura de tabla vacunas:');
     for (var columna in tablaInfo) {
       print('  ${columna['name']} (${columna['type']})');
+    }
+  }
+
+  // ✅ NUEVO MÉTODO: Depurar últimas vacunas registradas
+  Future<void> depurarVacunasRecientes() async {
+    final db = await database;
+    final resultados = await db.query(
+      'vacunas',
+      orderBy: 'id DESC',
+      limit: 10,
+    );
+    
+    print('\n=== ÚLTIMAS 10 VACUNAS REGISTRADAS ===');
+    for (var i = 0; i < resultados.length; i++) {
+      final vacuna = Vacuna.fromJson(resultados[i]);
+      print('Vacuna ${i + 1}:');
+      print('  ID: ${vacuna.id}');
+      print('  Nombre: ${vacuna.nombrePaciente}');
+      print('  Cédula: ${vacuna.cedulaPaciente}');
+      print('  Es Menor: ${vacuna.esMenor}');
+      print('  Cédula Tutor: ${vacuna.cedulaTutor}');
+      print('  Cédula Propia: ${vacuna.cedulaPropia}');
+      print('  Fecha: ${vacuna.fechaAplicacion}');
+      print('  --------------------');
+    }
+  }
+
+  // ✅ NUEVO MÉTODO: Reparar tabla si es necesario
+  Future<void> repararTablaVacunas() async {
+    final db = await database;
+    print('🛠️ Reparando tabla vacunas...');
+    
+    try {
+      // 1. Verificar columnas existentes
+      final tablaInfo = await db.rawQuery('PRAGMA table_info(vacunas)');
+      final columnasExistentes = tablaInfo.map((col) => col['name'] as String).toList();
+      
+      // 2. Crear nueva tabla temporal
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS vacunas_temp (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          server_id INTEGER,
+          paciente_id INTEGER,
+          paciente_server_id INTEGER,
+          nombre_vacuna TEXT NOT NULL,
+          fecha_aplicacion TEXT NOT NULL,
+          lote TEXT,
+          proxima_dosis TEXT,
+          usuario_id INTEGER,
+          is_synced INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT,
+          nombre_paciente TEXT,
+          cedula_paciente TEXT,
+          es_menor BOOLEAN DEFAULT FALSE,
+          cedula_tutor TEXT,
+          cedula_propia TEXT
+        )
+      ''');
+      
+      // 3. Copiar datos existentes
+      await db.execute('''
+        INSERT INTO vacunas_temp 
+        SELECT * FROM vacunas
+      ''');
+      
+      // 4. Eliminar tabla original
+      await db.execute('DROP TABLE vacunas');
+      
+      // 5. Renombrar tabla temporal
+      await db.execute('ALTER TABLE vacunas_temp RENAME TO vacunas');
+      
+      print('✅ Tabla vacunas reparada exitosamente');
+    } catch (e) {
+      print('❌ Error reparando tabla: $e');
     }
   }
 

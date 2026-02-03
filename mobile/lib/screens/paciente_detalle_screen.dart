@@ -421,45 +421,36 @@
 // }
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../models/vacuna.dart';
-import '../services/vacuna_service.dart';
 
 class PacienteDetalleScreen extends StatefulWidget {
   final String cedula;
   final String nombre;
+  final bool esGrupoFamiliar;
+  final Map<String, dynamic>? infoGrupo;
+  final List<Vacuna>? vacunas;
 
-  PacienteDetalleScreen({required this.cedula, required this.nombre});
+  PacienteDetalleScreen({
+    required this.cedula,
+    required this.nombre,
+    this.esGrupoFamiliar = false,
+    this.infoGrupo,
+    this.vacunas,
+  });
 
   @override
   _PacienteDetalleScreenState createState() => _PacienteDetalleScreenState();
 }
 
 class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
-  List<Vacuna> _vacunas = [];
+  List<Vacuna>? _vacunas;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _cargarVacunas();
-  }
-
-  Future<void> _cargarVacunas() async {
-    try {
-      final vacunaService = Provider.of<VacunaService>(context, listen: false);
-      final vacunas = await vacunaService.buscarPorCedula(widget.cedula);
-      
-      setState(() {
-        _vacunas = vacunas;
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('Error cargando vacunas: $e');
-      setState(() {
-        _isLoading = false;
-      });
-    }
+    _vacunas = widget.vacunas;
+    _isLoading = false;
   }
 
   @override
@@ -523,6 +514,17 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                                         color: Colors.grey[600],
                                       ),
                                     ),
+                                    if (widget.esGrupoFamiliar)
+                                      Chip(
+                                        label: Text(
+                                          'GRUPO FAMILIAR',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                        backgroundColor: Colors.orange,
+                                      ),
                                   ],
                                 ),
                               ),
@@ -533,21 +535,21 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
                               _buildStatItem(
-                                '${_vacunas.length}',
+                                _vacunas?.length.toString() ?? '0',
                                 'Vacunas',
                                 Icons.medical_services,
                                 Colors.blue,
                               ),
                               _buildStatItem(
-                                _vacunas.isNotEmpty 
-                                    ? _vacunas.first.fechaAplicacionFormateada 
+                                _vacunas?.isNotEmpty == true 
+                                    ? _formatearFecha(_vacunas!.first.fechaAplicacion) 
                                     : 'N/A',
                                 'Última',
                                 Icons.calendar_today,
                                 Colors.green,
                               ),
                               _buildStatItem(
-                                _vacunas.any((v) => v.proximaDosisPasada) 
+                                _vacunas?.any((v) => v.proximaDosisPasada) == true 
                                     ? 'SI' : 'NO',
                                 'Pendientes',
                                 Icons.warning,
@@ -571,14 +573,14 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       Chip(
-                        label: Text('${_vacunas.length} registros'),
+                        label: Text('${_vacunas?.length ?? 0} registros'),
                         backgroundColor: Colors.blue[50],
                       ),
                     ],
                   ),
                   SizedBox(height: 12),
                   
-                  if (_vacunas.isEmpty)
+                  if (_vacunas == null || _vacunas!.isEmpty)
                     Card(
                       child: Padding(
                         padding: EdgeInsets.all(32),
@@ -611,9 +613,9 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                     ListView.builder(
                       shrinkWrap: true,
                       physics: NeverScrollableScrollPhysics(),
-                      itemCount: _vacunas.length,
+                      itemCount: _vacunas!.length,
                       itemBuilder: (context, index) {
-                        final vacuna = _vacunas[index];
+                        final vacuna = _vacunas![index];
                         final bool isOverdue = vacuna.proximaDosisPasada;
                         
                         return Card(
@@ -637,7 +639,7 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                               ),
                             ),
                             subtitle: Text(
-                              'Aplicada: ${vacuna.fechaAplicacionFormateada}',
+                              'Aplicada: ${_formatearFecha(vacuna.fechaAplicacion)}',
                               style: TextStyle(
                                 color: isOverdue ? Colors.red[600] : null,
                               ),
@@ -683,7 +685,7 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                                     if (vacuna.proximaDosis != null)
                                       _buildDetailRow(
                                         'Próxima dosis:', 
-                                        vacuna.proximaDosisFormateada!,
+                                        _formatearFecha(vacuna.proximaDosis!),
                                         isImportant: isOverdue,
                                       ),
                                     _buildDetailRow(
@@ -697,8 +699,9 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                                       Container(
                                         padding: EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: Colors.red[100],
+                                          color: Colors.red[50],
                                           borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.red.shade100),
                                         ),
                                         child: Row(
                                           children: [
@@ -729,7 +732,7 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                   SizedBox(height: 24),
                   
                   // Resumen
-                  if (_vacunas.isNotEmpty)
+                  if (_vacunas != null && _vacunas!.isNotEmpty)
                     Card(
                       color: Colors.grey[50],
                       child: Padding(
@@ -749,15 +752,15 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                               dense: true,
                               leading: Icon(Icons.medical_services, size: 20),
                               title: Text('Total de vacunas registradas'),
-                              trailing: Text('${_vacunas.length}'),
+                              trailing: Text('${_vacunas!.length}'),
                             ),
                             ListTile(
                               dense: true,
                               leading: Icon(Icons.calendar_today, size: 20),
                               title: Text('Última vacuna aplicada'),
                               trailing: Text(
-                                _vacunas.isNotEmpty 
-                                    ? _vacunas.first.fechaAplicacionFormateada 
+                                _vacunas!.isNotEmpty 
+                                    ? _formatearFecha(_vacunas!.first.fechaAplicacion) 
                                     : 'N/A'
                               ),
                             ),
@@ -766,7 +769,7 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
                               leading: Icon(Icons.warning, size: 20),
                               title: Text('Vacunas atrasadas'),
                               trailing: Text(
-                                '${_vacunas.where((v) => v.proximaDosisPasada).length}'
+                                '${_vacunas!.where((v) => v.proximaDosisPasada).length}'
                               ),
                             ),
                           ],
@@ -839,5 +842,17 @@ class _PacienteDetalleScreenState extends State<PacienteDetalleScreen> {
         ],
       ),
     );
+  }
+
+  String _formatearFecha(String fecha) {
+    try {
+      final parts = fecha.split('-');
+      if (parts.length == 3) {
+        return '${parts[2]}/${parts[1]}/${parts[0]}';
+      }
+      return fecha;
+    } catch (e) {
+      return fecha;
+    }
   }
 }

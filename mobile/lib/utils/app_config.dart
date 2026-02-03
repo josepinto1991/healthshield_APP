@@ -1,19 +1,4 @@
-// // lib/app_config.dart
-// class AppConfig {
-//   static const String appName = 'HealthShield';
-//   static const String appVersion = 'alfa 1.0.1';
-//   static const String databaseName = 'healthshield.db';
-  
-//   // Configuración de API
-//   static const String apiBaseUrl = 'http://localhost:5001/api';
-
-//   static const int apiTimeoutSeconds = 30;
-  
-//   // Configuración de sincronización
-//   static const bool autoSyncEnabled = true;
-//   static const int syncIntervalMinutes = 30;
-// }
-
+// lib/app_config.dart
 class AppConfig {
   static const String appName = 'HealthShield';
   static const String appVersion = 'alfa 1.0.1';
@@ -29,10 +14,21 @@ class AppConfig {
   // Para producción:
   // static const String apiBaseUrl = 'https://tu-api.com/api';
   
+  // Para desarrollo sin servidor:
+  // static const String apiBaseUrl = 'http://localhost:8000/api';
+  
   static const int apiTimeoutSeconds = 30;
   static const bool autoSyncEnabled = true;
   static const int syncIntervalMinutes = 30;
   
   // Modo de desarrollo (permite funcionar sin API)
   static const bool developmentMode = true;
+  
+  // ✅ NUEVO: Verificar conexión a internet
+  static const String connectivityCheckUrl = 'https://www.google.com';
+  
+  // ✅ NUEVO: Mensajes de error personalizados
+  static const String noInternetMessage = 'No hay conexión a internet. Verifica tu conexión e intenta de nuevo.';
+  static const String serverUnavailableMessage = 'El servidor no está disponible en este momento. Los datos se guardarán localmente.';
+  static const String syncSuccessMessage = 'Sincronización completada exitosamente.';
 }
