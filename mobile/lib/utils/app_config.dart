@@ -1,13 +1,15 @@
 // lib/app_config.dart
 class AppConfig {
   static const String appName = 'HealthShield';
-  static const String appVersion = 'alfa 1.0.1';
+  static const String appVersion = 'Release 1.0.1';
   
   // Configuración de API - Para desarrollo con emulador Android
   // NOTA: En Android Emulator, localhost se refiere al dispositivo, no al host
   // Usa 10.0.2.2 para acceder al host local desde el emulador Android
-  static const String apiBaseUrl = 'http://10.0.2.2:8000/api'; // Para emulador Android
-  
+  // static const String apiBaseUrl = 'http://10.0.2.2:8000/api'; // Para emulador Android
+
+  static const String apiBaseUrl = 'https://healthshield-app.vercel.app/api';
+
   // Para dispositivo físico en la misma red:
   // static const String apiBaseUrl = 'http://192.168.1.100:8000/api';
   
