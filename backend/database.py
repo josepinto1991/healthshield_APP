@@ -1,237 +1,13 @@
-# import os
-# from sqlalchemy import create_engine
-# from sqlalchemy.orm import sessionmaker, declarative_base
-# from dotenv import load_dotenv
-# import bcrypt
-# import time
-# import logging
-
-# # Configurar logging
-# logging.basicConfig(
-#     level=logging.INFO,
-#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-# )
-# logger = logging.getLogger(__name__)
-
-# Base = declarative_base()
-
-# # ==================== CONFIGURACIÓN RAILWAY ====================
-
-# def get_database_url():
-#     """
-#     Obtener URL de PostgreSQL para Railway.
-#     Railway siempre inyecta DATABASE_URL cuando conectas PostgreSQL.
-#     """
-#     # 1. PRIORIDAD: DATABASE_URL de Railway (siempre existe cuando PostgreSQL está conectado)
-#     database_url = os.environ.get('DATABASE_URL')
-    
-#     if database_url:
-#         logger.info(f"✅ Usando DATABASE_URL de Railway (longitud: {len(database_url)})")
-        
-#         # Railway usa postgres://, SQLAlchemy necesita postgresql://
-#         if database_url.startswith("postgres://"):
-#             database_url = database_url.replace("postgres://", "postgresql://", 1)
-#             logger.info("✅ URL convertida de postgres:// a postgresql://")
-        
-#         return database_url
-    
-#     # 2. FALLBACK: Variables individuales (para desarrollo o Railway sin conexión automática)
-#     logger.warning("⚠️  DATABASE_URL no encontrada, usando variables individuales")
-    
-#     # Railway también puede inyectar estas variables
-#     db_host = os.environ.get('PGHOST') or os.environ.get('DB_HOST', 'localhost')
-#     db_port = os.environ.get('PGPORT') or os.environ.get('DB_PORT', '5432')
-#     db_name = os.environ.get('PGDATABASE') or os.environ.get('DB_NAME', 'railway')
-#     db_user = os.environ.get('PGUSER') or os.environ.get('DB_USER', 'postgres')
-#     db_pass = os.environ.get('PGPASSWORD') or os.environ.get('DB_PASSWORD', '')
-    
-#     # Construir URL
-#     database_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
-#     logger.info(f"🔗 URL construida: postgresql://{db_user}:***@{db_host}:{db_port}/{db_name}")
-    
-#     return database_url
-
-# def create_engine_with_retry(max_retries=5, initial_wait=2):
-#     """Crear engine con reintentos para Railway"""
-#     wait_time = initial_wait
-    
-#     for attempt in range(max_retries):
-#         try:
-#             database_url = get_database_url()
-            
-#             logger.info(f"🔄 Intento {attempt + 1}/{max_retries} de conexión a PostgreSQL")
-            
-#             # Configurar parámetros SSL para Railway
-#             connect_args = {
-#                 "connect_timeout": 10,
-#                 "keepalives": 1,
-#                 "keepalives_idle": 30,
-#             }
-            
-#             # Si es Railway (dominio railway.app), forzar SSL
-#             if "railway.app" in database_url or "up.railway.app" in database_url:
-#                 connect_args["sslmode"] = "require"
-#                 logger.info("🔐 Usando SSL para Railway")
-            
-#             engine = create_engine(
-#                 database_url,
-#                 echo=False,  # Desactivar en producción
-#                 pool_pre_ping=True,
-#                 pool_recycle=300,
-#                 pool_size=5,
-#                 max_overflow=10,
-#                 connect_args=connect_args
-#             )
-            
-#             # Test connection
-#             with engine.connect() as conn:
-#                 result = conn.execute("SELECT version()")
-#                 version = result.scalar()
-#                 logger.info(f"✅ PostgreSQL conectado: {version.split(',')[0]}")
-            
-#             return engine
-            
-#         except Exception as e:
-#             error_msg = str(e)
-#             logger.warning(f"⚠️  Error en intento {attempt + 1}: {error_msg[:100]}...")
-            
-#             # Verificar si es error de autenticación
-#             if "password authentication failed" in error_msg:
-#                 logger.error("❌ ERROR: Autenticación fallida")
-#                 logger.error("💡 Verifica que DATABASE_URL sea correcta en Railway")
-#                 logger.error("   En Railway Dashboard:")
-#                 logger.error("   1. Ve a PostgreSQL service")
-#                 logger.error("   2. Haz clic en 'Connect'")
-#                 logger.error("   3. Selecciona tu API service")
-            
-#             if attempt < max_retries - 1:
-#                 logger.info(f"⏳ Esperando {wait_time}s antes de reintentar...")
-#                 time.sleep(wait_time)
-#                 wait_time = min(wait_time * 1.5, 10)  # Backoff, máximo 10s
-#             else:
-#                 logger.error(f"❌ Error conectando a PostgreSQL después de {max_retries} intentos")
-#                 # NO levantar excepción, devolver None para que la app pueda iniciar
-#                 return None
-    
-#     return None
-
-# # ==================== INICIALIZACIÓN GLOBAL ====================
-
-# # Diagnosticar entorno Railway antes de crear engine
-# logger.info(f"🔍 Entorno Railway: {os.environ.get('RAILWAY_ENVIRONMENT', 'No configurado')}")
-# logger.info(f"🔍 Servicio: {os.environ.get('RAILWAY_SERVICE_NAME', 'No configurado')}")
-
-# # Verificar si DATABASE_URL está presente
-# if os.environ.get('DATABASE_URL'):
-#     logger.info("✅ DATABASE_URL detectada en variables de entorno")
-# else:
-#     logger.warning("⚠️  DATABASE_URL no encontrada")
-#     logger.info("🔍 Buscando variables PostgreSQL de Railway...")
-#     pg_vars = ['PGHOST', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD']
-#     found_vars = [var for var in pg_vars if os.environ.get(var)]
-#     if found_vars:
-#         logger.info(f"✅ Variables PostgreSQL encontradas: {', '.join(found_vars)}")
-#     else:
-#         logger.warning("⚠️  No se encontraron variables de conexión a PostgreSQL")
-
-# # Crear engine
-# engine = create_engine_with_retry()
-
-# if engine is None:
-#     logger.error("❌ No se pudo crear engine de base de datos")
-#     logger.warning("⚠️  La aplicación iniciará SIN base de datos")
-#     logger.info("💡 Los endpoints que requieran DB mostrarán un error apropiado")
-#     SessionLocal = None
-# else:
-#     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-#     logger.info("✅ SQLAlchemy configurado correctamente")
-
-# # ==================== FUNCIONES PÚBLICAS ====================
-
-# def get_db():
-#     """Dependencia para obtener sesión de base de datos"""
-#     if SessionLocal is None:
-#         raise RuntimeError(
-#             "Base de datos no disponible. "
-#             "Por favor, verifica la configuración de PostgreSQL en Railway: "
-#             "1. Conecta PostgreSQL a tu API service "
-#             "2. Verifica que DATABASE_URL está configurada "
-#             "3. Reinicia el servicio si es necesario"
-#         )
-    
-#     db = SessionLocal()
-#     try:
-#         yield db
-#     finally:
-#         db.close()
-
-# def hash_password(password: str) -> str:
-#     """Hash password usando bcrypt"""
-#     password_bytes = password.encode('utf-8')
-#     if len(password_bytes) > 72:
-#         password_bytes = password_bytes[:72]
-#     salt = bcrypt.gensalt()
-#     hashed = bcrypt.hashpw(password_bytes, salt)
-#     return hashed.decode('utf-8')
-
-# def verify_password(plain_password: str, hashed_password: str) -> bool:
-#     """Verificar password usando bcrypt"""
-#     try:
-#         plain_bytes = plain_password.encode('utf-8')
-#         if len(plain_bytes) > 72:
-#             plain_bytes = plain_bytes[:72]
-#         hashed_bytes = hashed_password.encode('utf-8')
-#         return bcrypt.checkpw(plain_bytes, hashed_bytes)
-#     except Exception:
-#         return False
-
-# def init_db():
-#     """Inicializar tablas en PostgreSQL"""
-#     if engine is None:
-#         logger.error("❌ No se puede inicializar DB: engine no disponible")
-#         return False
-    
-#     try:
-#         from models import Usuario, Paciente, Vacuna
-        
-#         logger.info("🔄 Creando tablas en PostgreSQL...")
-#         Base.metadata.create_all(bind=engine)
-#         logger.info("✅ Tablas creadas/verificadas en PostgreSQL")
-#         return True
-        
-#     except Exception as e:
-#         logger.error(f"❌ Error inicializando base de datos: {e}")
-#         return False
-
-# # ==================== DIAGNÓSTICO FINAL ====================
-
-# if __name__ == "__main__":
-#     print("\n" + "="*60)
-#     print("DIAGNÓSTICO DE CONEXIÓN RAILWAY")
-#     print("="*60)
-    
-#     # Mostrar información de Railway
-#     railway_vars = {
-#         'RAILWAY_ENVIRONMENT': os.environ.get('RAILWAY_ENVIRONMENT'),
-#         'RAILWAY_SERVICE_NAME': os.environ.get('RAILWAY_SERVICE_NAME'),
-#         'RAILWAY_SERVICE_ID': os.environ.get('RAILWAY_SERVICE_ID'),
-#         'DATABASE_URL': 'PRESENTE' if os.environ.get('DATABASE_URL') else 'AUSENTE',
-#     }
-    
-#     for key, value in railway_vars.items():
-#         print(f"{key}: {value}")
-    
-#     print("="*60)
-
-
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
-from dotenv import load_dotenv
-import bcrypt
-import time
+from sqlalchemy.exc import OperationalError
 import logging
+import time
+import bcrypt
+
+# ==================== CONFIGURACIÓN ====================
 
 # Configurar logging
 logging.basicConfig(
@@ -242,255 +18,407 @@ logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
-# ==================== CONFIGURACIÓN RAILWAY POSTGRESQL ====================
+# ==================== CONEXIÓN NEON POSTGRESQL ====================
 
-def get_database_url():
+def get_neon_database_url():
     """
-    Obtener URL de PostgreSQL de Railway usando la información del Public Networking.
+    Obtener URL de conexión para Neon PostgreSQL.
+    Vercel inyecta automáticamente estas variables.
     """
-    # 1. PRIORIDAD: URL directa del Public Networking
-    # Usar la URL que muestra en Railway: shortline.proxy.rlwy.net:25309
-    railway_public_host = os.environ.get('RAILWAY_PUBLIC_HOST', 'shortline.proxy.rlwy.net')
-    railway_public_port = os.environ.get('RAILWAY_PUBLIC_PORT', '25309')
+    # Prioridad de variables (Vercel Marketplace las inyecta)
+    url_sources = [
+        ('DATABASE_URL', 'DATABASE_URL de Vercel/Neon'),
+        ('NEON_DATABASE_URL', 'NEON_DATABASE_URL'),
+        ('POSTGRES_URL', 'POSTGRES_URL'),
+    ]
     
-    # Credenciales de Railway
-    pg_user = os.environ.get('PGUSER') or os.environ.get('POSTGRES_USER', 'postgres')
-    pg_password = os.environ.get('PGPASSWORD') or os.environ.get('POSTGRES_PASSWORD', 'MSUmKOBXAZRrfTHUJhkDYijZXuKCLXCp')
-    pg_database = os.environ.get('PGDATABASE') or os.environ.get('POSTGRES_DB', 'railway')
+    for var_name, description in url_sources:
+        database_url = os.environ.get(var_name)
+        if database_url:
+            logger.info(f"✅ Usando {description}")
+            # Asegurar formato postgresql://
+            if database_url.startswith('postgres://'):
+                database_url = database_url.replace('postgres://', 'postgresql://', 1)
+            return database_url
     
-    # Construir URL de Public Networking
-    database_url = f"postgresql://{pg_user}:{pg_password}@{railway_public_host}:{railway_public_port}/{pg_database}"
+    # Variables individuales (fallback)
+    pg_host = os.environ.get('PGHOST')
+    pg_user = os.environ.get('PGUSER')
+    pg_password = os.environ.get('PGPASSWORD')
+    pg_database = os.environ.get('PGDATABASE')
     
-    logger.info(f"🔗 URL Public Networking: postgresql://{pg_user}:***@{railway_public_host}:{railway_public_port}/{pg_database}")
+    if all([pg_host, pg_user, pg_password, pg_database]):
+        database_url = f"postgresql://{pg_user}:{pg_password}@{pg_host}/{pg_database}"
+        logger.info("🔗 URL construida desde variables individuales")
+        return database_url
     
-    return database_url
+    # No hay configuración
+    logger.error("""
+    ❌ ERROR: No se encontró configuración de base de datos
+    
+    🔧 SOLUCIÓN RÁPIDA:
+    1. Ve a Vercel Dashboard → Storage
+    2. Busca 'Neon' en 'Marketplace Database Providers'
+    3. Haz clic en 'Create'
+    4. Sigue los pasos (crea cuenta si es necesario)
+    5. Vercel inyectará automáticamente DATABASE_URL
+    6. Reinicia el deployment
+    
+    💡 Neon ofrece 10GB gratis - perfecto para esta aplicación
+    """)
+    
+    return None
 
-def create_engine_with_railway():
-    """Crear engine optimizado para Railway PostgreSQL Public Networking"""
+def create_neon_engine():
+    """Crear engine SQLAlchemy para Neon PostgreSQL"""
     try:
-        database_url = get_database_url()
+        database_url = get_neon_database_url()
         
-        logger.info(f"🔄 Conectando a Railway PostgreSQL (Public Networking)...")
-        logger.info(f"📊 Host: {database_url.split('@')[-1].split(':')[0]}")
+        if not database_url:
+            logger.error("❌ No se pudo obtener URL de base de datos")
+            return None
         
-        # Configuración optimizada para Railway Public Networking
-        connect_args = {
-            "connect_timeout": 15,  # Más tiempo para conexiones externas
-            "keepalives": 1,
-            "keepalives_idle": 30,
-            "keepalives_interval": 10,
-            "keepalives_count": 5,
-            "sslmode": "require",  # IMPORTANTE: Railway requiere SSL
-            "sslrootcert": "/etc/ssl/certs/ca-certificates.crt",
-        }
+        logger.info("🔗 Configurando conexión a Neon PostgreSQL...")
         
-        # Para Vercel Serverless, usar NullPool
+        # Asegurar parámetros de conexión SSL
+        if '?' not in database_url:
+            database_url += '?sslmode=require'
+        elif 'sslmode=' not in database_url:
+            database_url += '&sslmode=require'
+        
+        # Añadir parámetros de optimización para Neon
+        if 'options=' not in database_url:
+            database_url += '&options=-c%20statement_timeout%3D30000'
+        
+        # Configuración optimizada para Vercel + Neon (serverless)
         engine = create_engine(
             database_url,
-            echo=False,
-            poolclass=NullPool,  # IMPORTANTE para Vercel
+            echo=False,  # Cambiar a True para debug en desarrollo
+            poolclass=NullPool,  # CRÍTICO para serverless
             pool_pre_ping=True,
             pool_recycle=300,
-            connect_args=connect_args,
-            # Timeouts adicionales para Vercel
+            connect_args={
+                "connect_timeout": 15,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+                "application_name": "healthshield-api-vercel",
+            },
+            # Configuración adicional para serverless
             pool_timeout=30,
-            max_overflow=0
+            max_overflow=0,
+            pool_use_lifo=True
         )
         
-        # Test connection con timeout
-        import socket
-        socket.setdefaulttimeout(15)
-        
+        # Verificar conexión
+        logger.info("🔄 Probando conexión a Neon PostgreSQL...")
         with engine.connect() as conn:
-            result = conn.execute("""
+            result = conn.execute(text("""
                 SELECT 
-                    current_database() as db,
-                    current_user as user,
-                    inet_server_addr() as host,
-                    inet_server_port() as port,
                     version() as version,
+                    current_database() as database,
+                    current_user as username,
+                    inet_server_addr() as host,
+                    pg_database_size(current_database()) as size_bytes,
                     now() as server_time
-            """)
+            """))
             db_info = result.fetchone()
-            logger.info(f"✅ PostgreSQL conectado exitosamente:")
-            logger.info(f"   Database: {db_info.db}")
-            logger.info(f"   User: {db_info.user}")
-            logger.info(f"   Server: {db_info.host}:{db_info.port}")
-            logger.info(f"   Version: {db_info.version.split(',')[0]}")
-            logger.info(f"   Server Time: {db_info.server_time}")
+            
+            # Calcular tamaño en MB
+            size_mb = db_info.size_bytes / (1024 * 1024)
+            
+            logger.info(f"""
+            ✅ CONEXIÓN EXITOSA A NEON POSTGRESQL:
+               Database: {db_info.database}
+               Username: {db_info.username}
+               Host: {db_info.host}
+               Versión: {db_info.version.split(',')[0]}
+               Tamaño DB: {size_mb:.2f} MB
+               Hora Servidor: {db_info.server_time}
+            """)
         
         return engine
         
-    except Exception as e:
+    except OperationalError as e:
         error_msg = str(e)
-        logger.error(f"❌ Error conectando a Railway PostgreSQL: {error_msg}")
+        logger.error(f"❌ Error de conexión a Neon: {error_msg}")
         
         # Diagnóstico detallado
-        logger.error("💡 SOLUCIÓN RÁPIDA:")
-        logger.error("  1. Verifica que Railway PostgreSQL esté corriendo")
-        logger.error("  2. Usa EXACTAMENTE estas variables en Vercel:")
-        logger.error("     PGUSER=postgres")
-        logger.error("     PGPASSWORD=MSUmKOBXAZRrfTHUJhkDYijZXuKCLXCp")
-        logger.error("     PGDATABASE=railway")
-        logger.error("     RAILWAY_PUBLIC_HOST=shortline.proxy.rlwy.net")
-        logger.error("     RAILWAY_PUBLIC_PORT=25309")
-        logger.error("  3. Railway requiere SSL - la URL debe usar 'postgresql://'")
+        if "password authentication failed" in error_msg.lower():
+            logger.error("🔑 ERROR: Credenciales incorrectas")
+            logger.info("💡 Verifica que DATABASE_URL tenga usuario/contraseña correctos")
+        elif "could not translate host name" in error_msg.lower():
+            logger.error("🌐 ERROR: Host no encontrado")
+            logger.info("💡 El host de Neon podría estar incorrecto")
+        elif "timeout" in error_msg.lower():
+            logger.error("⏱️  ERROR: Timeout de conexión")
+            logger.info("💡 Neon podría estar en una región diferente")
+        elif "SSL" in error_msg:
+            logger.error("🔐 ERROR: Problema con SSL")
+            logger.info("💡 Asegúrate de que la URL tenga '?sslmode=require'")
         
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Error inesperado: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return None
 
 # ==================== INICIALIZACIÓN GLOBAL ====================
 
-# Diagnosticar entorno
-logger.info(f"🔍 Entorno: {os.environ.get('ENVIRONMENT', 'development')}")
-logger.info(f"🔍 Vercel: {os.environ.get('VERCEL', 'No')}")
+# Mensaje de inicio
+logger.info("="*70)
+logger.info("🚀 HEALTHSHIELD API - NEON POSTGRESQL EN VERCEL")
+logger.info("="*70)
 
-# Solo cargar .env en desarrollo local
-if not os.environ.get('VERCEL'):
-    load_dotenv()
-    logger.info("✅ Modo desarrollo local: .env cargado")
-else:
-    logger.info("✅ Modo Vercel: usando variables del entorno")
-
-# Verificar variables críticas
-critical_vars = {
-    'PGUSER': os.environ.get('PGUSER'),
-    'PGPASSWORD': '***' if os.environ.get('PGPASSWORD') else None,
-    'PGDATABASE': os.environ.get('PGDATABASE'),
-    'RAILWAY_PUBLIC_HOST': os.environ.get('RAILWAY_PUBLIC_HOST', 'shortline.proxy.rlwy.net'),
-    'RAILWAY_PUBLIC_PORT': os.environ.get('RAILWAY_PUBLIC_PORT', '25309')
+# Información del entorno
+env_info = {
+    'Entorno': os.environ.get('ENVIRONMENT', 'development'),
+    'Vercel': os.environ.get('VERCEL', 'No'),
+    'Región Vercel': os.environ.get('VERCEL_REGION', 'desconocida'),
+    'Git Commit': os.environ.get('VERCEL_GIT_COMMIT_SHA', 'local')[:7] if os.environ.get('VERCEL_GIT_COMMIT_SHA') else 'local'
 }
 
-missing_vars = [k for k, v in critical_vars.items() if v is None]
-if missing_vars:
-    logger.warning(f"⚠️  Variables faltantes: {', '.join(missing_vars)}")
-    logger.info("💡 Configura estas variables en Vercel Environment Variables")
-else:
-    logger.info("✅ Todas las variables críticas están configuradas")
+for key, value in env_info.items():
+    logger.info(f"📊 {key}: {value}")
 
-# Crear engine
-engine = create_engine_with_railway()
+# Verificar variables de base de datos
+db_vars_to_check = ['DATABASE_URL', 'NEON_DATABASE_URL', 'POSTGRES_URL', 'PGHOST']
+found_db_vars = []
 
-if engine is None:
-    logger.error("❌ No se pudo crear engine de base de datos")
-    logger.warning("⚠️  La aplicación iniciará SIN base de datos")
-    SessionLocal = None
+for var in db_vars_to_check:
+    value = os.environ.get(var)
+    if value:
+        found_db_vars.append(var)
+        # Mostrar de forma segura
+        if var.endswith('_URL') and '@' in value:
+            parts = value.split('@')
+            if len(parts) == 2:
+                user_part = parts[0]
+                if '://' in user_part:
+                    protocol = user_part.split('://')[0]
+                    credentials = user_part.split('://')[1]
+                    if ':' in credentials:
+                        user = credentials.split(':')[0]
+                        logger.info(f"🔗 {var}: {protocol}://{user}:***@{parts[1].split('?')[0][:40]}...")
+
+if found_db_vars:
+    logger.info(f"✅ Variables DB encontradas: {', '.join(found_db_vars)}")
 else:
+    logger.warning("⚠️  No se encontraron variables de base de datos")
+
+logger.info("="*70)
+
+# Crear engine global
+engine = create_neon_engine()
+
+if engine:
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    logger.info("✅ SQLAlchemy configurado correctamente")
+    logger.info("✅ SQLAlchemy configurado exitosamente")
+else:
+    SessionLocal = None
+    logger.warning("⚠️  La aplicación iniciará SIN base de datos")
+    logger.info("💡 Los endpoints que requieran DB mostrarán un error apropiado")
 
 # ==================== FUNCIONES PÚBLICAS ====================
 
 def get_db():
-    """Dependencia para obtener sesión de base de datos"""
+    """
+    Dependencia FastAPI para obtener sesión de base de datos.
+    Uso: @app.get("/endpoint", dependencies=[Depends(get_db)])
+    """
     if SessionLocal is None:
         raise RuntimeError(
-            "Base de datos no disponible. "
-            "\n\n🔧 CONFIGURACIÓN REQUERIDA PARA VERCEL:"
-            "\n"
-            "\n1. Ve a Vercel Dashboard → Settings → Environment Variables"
-            "\n"
-            "\n2. Agrega estas variables (OBLIGATORIAS):"
-            "\n   PGUSER=postgres"
-            "\n   PGPASSWORD=MSUmKOBXAZRrfTHUJhkDYijZXuKCLXCp"
-            "\n   PGDATABASE=railway"
-            "\n   RAILWAY_PUBLIC_HOST=shortline.proxy.rlwy.net"
-            "\n   RAILWAY_PUBLIC_PORT=25309"
-            "\n"
-            "\n3. Variables opcionales:"
-            "\n   SECRET_KEY=tu_super_secreto_32_chars"
-            "\n   ADMIN_PASSWORD=admin123"
-            "\n   ALLOWED_ORIGINS=https://tufrontend.vercel.app"
-            "\n"
-            "\n4. Reinicia el deployment en Vercel"
+            "🚫 Base de datos no disponible\n\n"
+            "📋 CONFIGURACIÓN REQUERIDA PARA VERCEL:\n"
+            "1. Ve a Vercel Dashboard → Storage\n"
+            "2. En 'Marketplace Database Providers', busca 'Neon'\n"
+            "3. Haz clic en 'Create'\n"
+            "4. Sigue los pasos para crear la base de datos\n"
+            "5. Vercel inyectará automáticamente DATABASE_URL\n"
+            "6. Reinicia el deployment\n\n"
+            "⚡ Neon es PostgreSQL serverless - 10GB gratis\n"
+            "🔗 Se integrará automáticamente con tu API"
         )
     
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        logger.error(f"❌ Error en sesión DB: {e}")
+        db.rollback()
+        raise
     finally:
         db.close()
 
 def hash_password(password: str) -> str:
-    """Hash password usando bcrypt"""
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password_bytes = password_bytes[:72]
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')
+    """Hashear contraseña usando bcrypt"""
+    try:
+        password_bytes = password.encode('utf-8')
+        # bcrypt solo soporta hasta 72 bytes
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+            logger.warning("⚠️  Contraseña truncada a 72 caracteres para bcrypt")
+        
+        salt = bcrypt.gensalt(rounds=12)
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        return hashed.decode('utf-8')
+    except Exception as e:
+        logger.error(f"❌ Error hasheando contraseña: {e}")
+        raise
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verificar password usando bcrypt"""
+    """Verificar contraseña con hash bcrypt"""
     try:
         plain_bytes = plain_password.encode('utf-8')
         if len(plain_bytes) > 72:
             plain_bytes = plain_bytes[:72]
+        
         hashed_bytes = hashed_password.encode('utf-8')
         return bcrypt.checkpw(plain_bytes, hashed_bytes)
     except Exception:
+        logger.warning("⚠️  Error verificando contraseña")
         return False
 
 def init_db():
-    """Inicializar tablas en Railway PostgreSQL"""
+    """Inicializar todas las tablas en la base de datos"""
     if engine is None:
         logger.error("❌ No se puede inicializar DB: engine no disponible")
         return False
     
     try:
+        # Importar aquí para evitar dependencias circulares
         from models import Usuario, Paciente, Vacuna
         
-        logger.info("🔄 Creando tablas en Railway PostgreSQL...")
+        logger.info("🔄 Inicializando base de datos...")
+        
+        # Crear todas las tablas definidas en los modelos
         Base.metadata.create_all(bind=engine)
-        logger.info("✅ Tablas creadas/verificadas")
+        
+        logger.info("✅ Tablas creadas exitosamente")
         
         # Verificar tablas creadas
         with engine.connect() as conn:
-            result = conn.execute("""
-                SELECT table_name 
+            result = conn.execute(text("""
+                SELECT table_name, table_type
                 FROM information_schema.tables 
                 WHERE table_schema = 'public'
                 ORDER BY table_name
-            """)
-            tables = [row[0] for row in result.fetchall()]
-            logger.info(f"📊 Tablas disponibles: {', '.join(tables)}")
+            """))
+            tables = result.fetchall()
+            
+            if tables:
+                logger.info("📊 Tablas en la base de datos:")
+                for table_name, table_type in tables:
+                    # Contar registros
+                    try:
+                        count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        count = count_result.scalar()
+                        logger.info(f"   • {table_name} ({table_type}): {count} registros")
+                    except:
+                        logger.info(f"   • {table_name} ({table_type})")
+            else:
+                logger.warning("⚠️  No se encontraron tablas")
         
         return True
         
     except Exception as e:
         logger.error(f"❌ Error inicializando base de datos: {e}")
+        import traceback
+        logger.error("Detalles del error:")
+        logger.error(traceback.format_exc())
         return False
 
-# ==================== DIAGNÓSTICO FINAL ====================
+# ==================== FUNCIÓN DE DIAGNÓSTICO ====================
+
+def check_database_health():
+    """Verificar salud de la conexión a la base de datos"""
+    if engine is None:
+        return {
+            "status": "disconnected",
+            "message": "Engine no disponible",
+            "timestamp": time.time()
+        }
+    
+    try:
+        with engine.connect() as conn:
+            # Consulta simple para verificar conectividad
+            start_time = time.time()
+            result = conn.execute(text("SELECT 1 as test, now() as timestamp"))
+            end_time = time.time()
+            
+            row = result.fetchone()
+            response_time = (end_time - start_time) * 1000  # en ms
+            
+            # Obtener estadísticas
+            result = conn.execute(text("""
+                SELECT 
+                    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public') as table_count,
+                    (SELECT COUNT(*) FROM usuarios) as usuarios_count,
+                    (SELECT COUNT(*) FROM pacientes) as pacientes_count,
+                    (SELECT COUNT(*) FROM vacunas) as vacunas_count
+            """))
+            stats = result.fetchone()
+            
+            return {
+                "status": "connected",
+                "response_time_ms": round(response_time, 2),
+                "server_timestamp": row.timestamp.isoformat(),
+                "statistics": {
+                    "table_count": stats.table_count if stats else 0,
+                    "usuarios": stats.usuarios_count if stats else 0,
+                    "pacientes": stats.pacientes_count if stats else 0,
+                    "vacunas": stats.vacunas_count if stats else 0
+                },
+                "timestamp": time.time()
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": time.time()
+        }
+
+# ==================== EJECUCIÓN DIRECTA ====================
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("DIAGNÓSTICO: VERCEL → RAILWAY POSTGRESQL")
-    print("="*60)
+    print("\n" + "="*70)
+    print("🔍 DIAGNÓSTICO NEON POSTGRESQL")
+    print("="*70)
     
     # Mostrar configuración
-    config = {
-        'RAILWAY_PUBLIC_HOST': os.environ.get('RAILWAY_PUBLIC_HOST', 'shortline.proxy.rlwy.net'),
-        'RAILWAY_PUBLIC_PORT': os.environ.get('RAILWAY_PUBLIC_PORT', '25309'),
-        'PGUSER': os.environ.get('PGUSER', 'postgres'),
-        'PGDATABASE': os.environ.get('PGDATABASE', 'railway'),
-        'PGPASSWORD': 'CONFIGURADO' if os.environ.get('PGPASSWORD') else 'FALTANTE'
+    config_summary = {
+        'VERCEL': os.environ.get('VERCEL', 'No (desarrollo local)'),
+        'ENVIRONMENT': os.environ.get('ENVIRONMENT', 'development'),
+        'DATABASE_URL_PRESENT': 'Sí' if os.environ.get('DATABASE_URL') else 'No',
+        'NEON_DATABASE_URL_PRESENT': 'Sí' if os.environ.get('NEON_DATABASE_URL') else 'No',
     }
     
-    for key, value in config.items():
+    for key, value in config_summary.items():
         print(f"{key}: {value}")
     
+    # Probar conexión si hay engine
     if engine:
-        try:
-            with engine.connect() as conn:
-                result = conn.execute("SELECT version(), current_database(), now()")
-                info = result.fetchone()
-                print(f"\n✅ Conexión exitosa:")
-                print(f"   Database: {info[1]}")
-                print(f"   Version: {info[0].split(',')[0]}")
-                print(f"   Server Time: {info[2]}")
-        except Exception as e:
-            print(f"\n❌ Error de conexión: {e}")
+        health = check_database_health()
+        print(f"\n📊 Estado de la base de datos: {health['status'].upper()}")
+        
+        if health['status'] == 'connected':
+            print(f"   ⚡ Latencia: {health['response_time_ms']}ms")
+            print(f"   🕐 Hora servidor: {health['server_timestamp']}")
+            if 'statistics' in health:
+                print(f"   📈 Tablas: {health['statistics']['table_count']}")
+                print(f"   👥 Usuarios: {health['statistics']['usuarios']}")
+                print(f"   👤 Pacientes: {health['statistics']['pacientes']}")
+                print(f"   💉 Vacunas: {health['statistics']['vacunas']}")
     else:
-        print(f"\n❌ Engine no disponible")
+        print("\n❌ No hay conexión a base de datos")
+        print("💡 Ejecuta estos pasos:")
+        print("   1. Ve a Vercel Dashboard → Storage")
+        print("   2. Busca 'Neon' y haz clic en 'Create'")
+        print("   3. Sigue los pasos para crear la DB")
+        print("   4. Reinicia el deployment")
     
-    print("="*60)
+    print("="*70)
