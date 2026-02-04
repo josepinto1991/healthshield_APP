@@ -6,9 +6,6 @@ import '../models/paciente.dart';
 
 class ApiService {
   // Configuración de la API
-  // static const String baseUrl = 'http://10.0.2.2:8000/api'; // Para emulador Android
-  // static const String baseUrl = 'http://192.168.1.100:8000/api'; // Para dispositivo físico
-
   static const String baseUrl = 'https://healthshield-app.vercel.app/api';
 
   final Map<String, String> headers = {

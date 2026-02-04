@@ -212,21 +212,44 @@ if os.environ.get('ALLOWED_ORIGINS'):
 else:
     # Valores por defecto
     allowed_origins = [
+        # Desarrollo local
         "http://localhost:3000",
-        "http://localhost:5173",
+        "http://localhost:5173", 
         "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8080",
+        
+        # Para Flutter Web
+        "http://localhost:5000", 
+        "http://127.0.0.1:5000",
+        
+        # Para Flutter en emulador Android
+        "http://10.0.2.2:8000",  # Emulador Android a localhost
+        "http://10.0.2.2:3000",
+        
+        # Para Flutter en emulador iOS
+        "http://localhost:8000",
+        
+        # Producción - tu dominio de Vercel
+        "https://healthshield-app.vercel.app",
         "https://*.vercel.app",
+        
+        # Para Flutter Web compilado
+        "https://*.github.io",  # Si usas GitHub Pages
+        "http://localhost",     # Para pruebas
     ]
-    
-    # Agregar URL de Vercel si está disponible
-    vercel_url = os.environ.get('VERCEL_URL')
-    if vercel_url:
-        allowed_origins.append(f"https://{vercel_url}")
-    
-    # Filtrar vacíos
-    allowed_origins = [origin for origin in allowed_origins if origin]
+
+    # También permitir si se especifica en variables de entorno
+    if os.environ.get('ALLOWED_ORIGINS'):
+        custom_origins = [origin.strip() for origin in os.environ.get('ALLOWED_ORIGINS').split(",")]
+        allowed_origins.extend(custom_origins)
+
+    # Filtrar duplicados y vacíos
+    allowed_origins = list(dict.fromkeys([origin for origin in allowed_origins if origin]))
 
 logger.info(f"🌐 CORS configurado para {len(allowed_origins)} orígenes")
+
 
 # ==================== APLICACIÓN FASTAPI ====================
 
