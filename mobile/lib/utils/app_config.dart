@@ -3,7 +3,7 @@ class AppConfig {
   static const String appName = 'HealthShield';
   static const String appVersion = 'Release 1.0.1';
   
-  static const String apiBaseUrl = 'https://healthshield-app.vercel.app/api';
+  static const String apiBaseUrl = 'https://healthshield-app.vercel.app/';
   
   static const int apiTimeoutSeconds = 30;
   static const bool autoSyncEnabled = true;
