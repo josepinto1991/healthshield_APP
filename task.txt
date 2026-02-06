@@ -35,3 +35,17 @@ sin scripts de coneccion en el front(Flutter) y colocasion de db SQLite en front
 
 bd postgres esta fallando al crearse con dockercompose
 
+necesito crear apk de esta aplicacion, y que se pueda ejecutar con flutter run y flutter build apk tanto release y debug, eliminar build.granle de esta ruta mobile/android/build.gradle y de esta ruta mobile/android/app/build.gradle y si se necesitan eliminarlos y crearlos njuevamente
+
+ejecutar para ver si funciona
+# Limpiar Gradle
+cd android
+./gradlew clean
+cd ..
+
+# Limpiar Flutter
+flutter clean
+flutter pub get
+
+# Intentar ejecutar
+flutter run
