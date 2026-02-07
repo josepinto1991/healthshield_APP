@@ -1,4 +1,3 @@
-// lib/screens/sync_screen.dart - VERSIÓN CORREGIDA PARA connectivity_plus 4.0+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -27,26 +26,17 @@ class _SyncScreenState extends State<SyncScreen> {
     _checkNetworkConnection();
     _loadSyncStatus();
     
-    // Escuchar cambios de conectividad en tiempo real - VERSIÓN CORREGIDA
-    Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
-      if (results.isNotEmpty) {
-        _updateNetworkStatus(results.first);
-      }
+    // ESCUCHAR CAMBIOS DE CONECTIVIDAD - VERSIÓN CORREGIDA PARA 5.0.1
+    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      _updateNetworkStatus(result);
     });
   }
 
   Future<void> _checkNetworkConnection() async {
     try {
-      final List<ConnectivityResult> results = await Connectivity().checkConnectivity();
-      if (results.isNotEmpty) {
-        _updateNetworkStatus(results.first);
-      } else {
-        setState(() {
-          _hasNetwork = false;
-          _hasInternet = false;
-          _currentConnectivity = ConnectivityResult.none;
-        });
-      }
+      // VERSIÓN CORREGIDA: checkConnectivity() retorna ConnectivityResult, no List
+      final ConnectivityResult result = await Connectivity().checkConnectivity();
+      _updateNetworkStatus(result);
     } catch (e) {
       print('Error verificando conectividad: $e');
       setState(() {
