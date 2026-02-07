@@ -1,3 +1,33 @@
+# name: healthshield
+# description: Aplicación móvil para gestión de vacunas
+
+# publish_to: 'none'
+
+# version: 1.0.0+1
+
+# environment:
+#   sdk: '>=3.0.0 <4.0.0'
+
+# dependencies:
+#   flutter:
+#     sdk: flutter
+#   sqflite: ^2.3.0
+#   path: ^1.8.3
+#   http: ^1.1.0
+#   provider: ^6.1.1
+#   connectivity_plus: ^5.0.1
+#   url_launcher: ^6.2.2
+
+# dev_dependencies:
+#   flutter_test:
+#     sdk: flutter
+#   flutter_lints: ^3.0.0
+
+# flutter:
+#   uses-material-design: true
+#   assets:
+#     - assets/images/
+
 name: healthshield
 description: Aplicación móvil para gestión de vacunas
 
@@ -22,6 +52,16 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/images/logo1.jpg"
+
+  adaptive_icon_background: "#FFFFFF" 
+  adaptive_icon_foreground: "assets/images/logo1.jpg"
 
 flutter:
   uses-material-design: true
