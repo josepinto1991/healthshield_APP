@@ -182,6 +182,7 @@ class _DetalleUsuarioScreenState extends State<DetalleUsuarioScreen> {
     );
   }
 
+
   Widget _buildInfoItem(String label, String value, {IconData? icon}) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 12),
@@ -277,19 +278,22 @@ class _DetalleUsuarioScreenState extends State<DetalleUsuarioScreen> {
                   
                   if (!isCurrentUser) SizedBox(height: 12),
                   
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _eliminarUsuario,
-                      icon: Icon(Icons.delete),
-                      label: Text('Eliminar Usuario'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _eliminarUsuario,
+                            icon: Icon(Icons.delete),
+                            label: Text('Eliminar Usuario'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        
+                        // Aquí agregas el espacio de 50px después del botón
+                        SizedBox(height: 50),
                 ],
               ),
           ],

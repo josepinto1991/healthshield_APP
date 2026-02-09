@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, status, Header
+from fastapi import FastAPI, HTTPException, Depends, Query, status, Header, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -11,6 +11,9 @@ from typing import List, Optional, Dict, Any
 import logging
 import sys
 from contextlib import asynccontextmanager
+from profesional_validator import ProfesionalValidator
+import re
+import hashlib 
 
 # ==================== CONFIGURACIÓN INICIAL ====================
 
@@ -87,6 +90,7 @@ except ImportError as e:
     logger.error("   - database.py")
     logger.error("   - models.py") 
     logger.error("   - repositories.py")
+    logger.error("   - profesional_validator.py")
     sys.exit(1)
 
 # ==================== FUNCIONES AUXILIARES ====================
@@ -1144,19 +1148,216 @@ async def general_exception_handler(request, exc):
         }
     )
 
+# ==================== VALIDACION PROFESIONAL ====================
+
+@app.post("/api/profesionales/validar", 
+          tags=["Profesionales"])
+async def validar_profesional(
+    request_data: Dict[str, Any] = Body(..., description="Datos de validación")
+):
+
+    # Obtener cédula del request
+    cedula = request_data.get("cedula", "").upper().strip()
+    
+    if not cedula:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cédula es requerida en el cuerpo de la solicitud"
+        )
+    
+    # Validar formato de cédula
+    if not re.match(r'^[VE]-\d{7,8}$', cedula):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de cédula inválido. Use: V-12345678 o E-12345678"
+        )
+    
+    logger.info(f"🔍 POST /profesionales/validar - Cédula: {cedula}")
+    
+    try:
+        # Paso 1: Consultar sistema SACS usando el validador
+        resultado = ProfesionalValidator.validate_cedula(cedula)
+        
+        # Paso 2: Generar un ID único para esta validación
+        import hashlib
+        import time as t
+        validation_id = f"val_{hashlib.md5(f'{cedula}_{t.time()}'.encode()).hexdigest()[:8]}"
+        
+        # Paso 3: Preparar respuesta estructurada
+        response_data = {
+            "success": resultado.get("success", False),
+            "operation": "validacion",
+            "cedula": cedula,
+            "is_valid": resultado.get("is_valid", False),
+            "validation_id": validation_id,
+            "message": "Validación completada",
+            "timestamp": resultado.get("timestamp", datetime.now().isoformat()),
+            "has_details": resultado.get("is_valid", False)  # Indica si hay detalles disponibles
+        }
+        
+        # Agregar mensaje específico
+        if resultado.get("success") and resultado.get("is_valid"):
+            response_data["validation_message"] = "✅ Cédula profesional válida"
+            response_data["next_step"] = f"Use GET /api/profesionales/detalles con validation_id: {validation_id}"
+        elif resultado.get("error"):
+            response_data["validation_message"] = f"❌ {resultado.get('error')}"
+        else:
+            response_data["validation_message"] = "❌ Cédula no válida"
+        
+        # Para debugging/logging
+        if resultado.get("success") and resultado.get("is_valid"):
+            logger.info(f"✅ Validación exitosa para {cedula}")
+            logger.info(f"📋 Validation ID generado: {validation_id}")
+        else:
+            logger.warning(f"⚠️ Validación fallida para {cedula}: {resultado.get('error', 'Error desconocido')}")
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error en validación: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno en validación: {str(e)[:100]}"
+        )
+
+@app.get("/api/profesionales/detalles", 
+         tags=["Profesionales"])
+async def obtener_detalles_profesional(
+    cedula: str = Query(..., description="Cédula profesional"),
+    validation_id: Optional[str] = Query(None, description="ID de validación (opcional)")
+):
+
+    cedula = cedula.upper().strip()
+    
+    if not cedula:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cédula es requerida"
+        )
+    
+    # Validar formato de cédula
+    if not re.match(r'^[VE]-\d{7,8}$', cedula):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de cédula inválido. Use: V-12345678 o E-12345678"
+        )
+    
+    logger.info(f"🔍 GET /profesionales/detalles - Cédula: {cedula}, Validation ID: {validation_id or 'N/A'}")
+    
+    try:
+        # Paso 1: Consultar sistema SACS nuevamente
+        resultado = ProfesionalValidator.validate_cedula(cedula)
+        
+        # Paso 2: Verificar si la consulta fue exitosa
+        if not resultado.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No se pudo consultar el profesional: {resultado.get('error', 'Error desconocido')}"
+            )
+        
+        if not resultado.get("is_valid"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Profesional no encontrado en el registro"
+            )
+        
+        # Paso 3: Preparar respuesta con detalles completos
+        response_data = {
+            "success": True,
+            "operation": "consulta_detalles",
+            "cedula": cedula,
+            "validation_id": validation_id or f"det_{hashlib.md5(f'{cedula}_{datetime.now().isoformat()}'.encode()).hexdigest()[:8]}",
+            "timestamp": resultado.get("timestamp", datetime.now().isoformat()),
+            "data": {
+                "nombre": resultado["user_data"]["nombre"],
+                "cedula": resultado["user_data"]["cedula"],
+                "tipo_cedula": resultado["user_data"]["tipo_cedula"],
+                "estatus": resultado["user_data"]["estatus"],
+                "registros": resultado["professional_data"]
+            },
+            "metadata": {
+                "total_registros": len(resultado["professional_data"]),
+                "fuente": "SACS (Sistema de Acreditación de la Salud)",
+                "url_consulta": "https://sistemas.sacs.gob.ve/consultas/prfsnal_salud"
+            }
+        }
+        
+        logger.info(f"✅ Detalles obtenidos para {cedula}: {resultado['user_data'].get('nombre', 'N/A')}")
+        logger.info(f"📊 Total registros: {len(resultado['professional_data'])}")
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo detalles: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno obteniendo detalles: {str(e)[:100]}"
+        )
+
+@app.get("/api/profesionales/verificar", 
+         tags=["Profesionales"])
+async def verificar_profesional(
+    cedula: str = Query(..., description="Cédula profesional a verificar")
+):
+
+    cedula = cedula.upper().strip()
+    
+    if not cedula:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cédula es requerida"
+        )
+    
+    # Validar formato de cédula
+    if not re.match(r'^[VE]-\d{7,8}$', cedula):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de cédula inválido. Use: V-12345678 o E-12345678"
+        )
+    
+    logger.info(f"⚡ GET /profesionales/verificar - Cédula: {cedula}")
+    
+    try:
+        # Consultar sistema SACS
+        resultado = ProfesionalValidator.validate_cedula(cedula)
+        
+        response_data = {
+            "success": resultado.get("success", False),
+            "operation": "verificacion_rapida",
+            "cedula": cedula,
+            "is_valid": resultado.get("is_valid", False),
+            "timestamp": resultado.get("timestamp", datetime.now().isoformat())
+        }
+        
+        # Agregar datos básicos si es válido
+        if resultado.get("success") and resultado.get("is_valid"):
+            response_data.update({
+                "nombre": resultado["user_data"]["nombre"],
+                "estatus": resultado["user_data"]["estatus"],
+                "message": "Profesional válido"
+            })
+        elif resultado.get("error"):
+            response_data["message"] = resultado["error"]
+        else:
+            response_data["message"] = "Profesional no válido"
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error en verificación rápida: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno en verificación: {str(e)[:100]}"
+        )
+
 # ==================== EJECUCIÓN ====================
 
 if __name__ == "__main__":
     import uvicorn
     
     port = int(os.environ.get("PORT", 8000))
-    
-    print(f"\n🔧 Iniciando servidor en puerto {port}...")
-    print(f"🌐 URL: http://localhost:{port}")
-    print(f"📚 Docs: http://localhost:{port}/docs")
-    print(f"🔍 Token debug: http://localhost:{port}/api/debug/token")
-    print("\n🟢 Servidor listo. Presiona Ctrl+C para detener.")
-    
     uvicorn.run(
         app,
         host="0.0.0.0",

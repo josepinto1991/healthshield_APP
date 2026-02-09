@@ -23,4 +23,7 @@
     
     <!-- Directorio de documentos -->
     <external-files-path name="documents" path="Documents/" />
+    
+    <!-- ✅ NUEVO: Directorio Documents interno -->
+    <files-path name="documents_internal" path="Documents/" />
 </paths>
