@@ -173,7 +173,7 @@ class AuthService {
   // ========== REGISTRO LOCAL SIMPLE ==========
   Future<bool> registrarUsuarioLocal(Usuario usuario) async {
     try {
-      print('📝 Registrando usuario local: ${usuario.username}');
+      print('📝 Registrando usuario local: ${usuario.username} (Rol: ${usuario.role})');
       
       final usuarios = await cacheService.getUsuarios();
       final existingUser = usuarios.firstWhere(
@@ -187,7 +187,7 @@ class AuthService {
       }
 
       await cacheService.insertUsuario(usuario);
-      print('✅ Usuario registrado localmente: ${usuario.username}');
+      print('✅ Usuario registrado localmente: ${usuario.username} (Rol: ${usuario.role})');
       return true;
     } catch (e) {
       print('❌ Error registrando usuario local: $e');
@@ -205,7 +205,16 @@ class AuthService {
     String cedulaVerificacion = '',
   }) async {
     try {
-      print('👨‍⚕️ Registrando profesional: ${usuario.username}');
+      print('👨‍⚕️ Registrando usuario: ${usuario.username} (Rol: ${usuario.role})');
+      
+      // Validar que solo admins puedan crear otros admins
+      if (usuario.role == 'admin' && !isAdmin) {
+        return {
+          'success': false,
+          'error': 'Solo administradores pueden crear otros administradores',
+          'isOffline': true,
+        };
+      }
       
       final usuarios = await cacheService.getUsuarios();
       final existsLocally = usuarios.any((u) => 
@@ -220,30 +229,32 @@ class AuthService {
         };
       }
 
-      // Registro simple sin verificación externa
-      final professionalUser = Usuario(
+      // Asegurar que profesionales tengan isProfessional = true
+      final isProfessionalUser = usuario.role == 'professional' || usuario.role == 'admin';
+      
+      final userToRegister = Usuario(
         id: null,
         serverId: null,
         username: usuario.username,
         email: usuario.email,
         password: usuario.password,
         telefono: usuario.telefono,
-        isProfessional: true,
+        isProfessional: isProfessionalUser,
         professionalLicense: usuario.professionalLicense,
         isVerified: true,
-        role: 'professional',
+        role: usuario.role,
         isSynced: false,
         createdAt: DateTime.now(),
       );
       
-      final success = await registrarUsuarioLocal(professionalUser);
+      final success = await registrarUsuarioLocal(userToRegister);
       
       if (success) {
-        print('✅ Profesional registrado exitosamente: ${usuario.username}');
+        print('✅ Usuario registrado exitosamente: ${usuario.username} (Rol: ${usuario.role})');
         return {
           'success': true,
-          'message': 'Profesional registrado exitosamente',
-          'user': professionalUser,
+          'message': 'Usuario registrado exitosamente',
+          'user': userToRegister,
           'isOffline': true,
           'requiresSync': false,
         };
@@ -255,7 +266,7 @@ class AuthService {
         };
       }
     } catch (e) {
-      print('❌ Error registrando profesional: $e');
+      print('❌ Error registrando usuario: $e');
       return {
         'success': false,
         'error': 'Error inesperado: $e',
@@ -357,10 +368,19 @@ class AuthService {
   // ========== GESTIÓN DE USUARIOS ==========
   Future<bool> actualizarUsuario(Usuario usuario) async {
     try {
-      print('✏️ Actualizando usuario: ${usuario.username}');
+      print('✏️ Actualizando usuario: ${usuario.username} (Rol: ${usuario.role})');
+      
+      // Validar que solo admins puedan convertir usuarios en admins
+      if (usuario.role == 'admin' && !isAdmin && usuario.id != _currentUser?.id) {
+        print('❌ Solo administradores pueden asignar rol de administrador');
+        return false;
+      }
+      
       final success = await cacheService.actualizarUsuario(usuario);
       if (success && usuario.id == _currentUser?.id) {
         _currentUser = usuario;
+        print('✅ Usuario actualizado (incluyendo usuario actual)');
+      } else if (success) {
         print('✅ Usuario actualizado');
       }
       return success;
@@ -452,6 +472,37 @@ class AuthService {
         'message': 'Error sincronizando usuarios: $e',
         'synced': 0,
       };
+    }
+  }
+
+  // ========== ELIMINAR USUARIO ==========
+  Future<bool> eliminarUsuario(int usuarioId) async {
+    try {
+      print('🗑️ Eliminando usuario ID: $usuarioId');
+      
+      // No permitir eliminar al usuario actual
+      if (usuarioId == _currentUser?.id) {
+        print('❌ No puedes eliminar tu propio usuario');
+        return false;
+      }
+      
+      final db = await cacheService.getDatabase();
+      final deleted = await db.delete(
+        'usuarios',
+        where: 'id = ?',
+        whereArgs: [usuarioId],
+      );
+      
+      if (deleted > 0) {
+        print('✅ Usuario eliminado exitosamente');
+        return true;
+      } else {
+        print('❌ Usuario no encontrado');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error eliminando usuario: $e');
+      return false;
     }
   }
 

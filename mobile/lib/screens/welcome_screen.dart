@@ -1,8 +1,4 @@
 import 'package:flutter/material.dart';
-// CAMBIAR ESTA LÍNEA:
-// import 'register_screen.dart';
-// POR:
-import 'professional_register_screen.dart';
 import 'login_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -24,75 +20,52 @@ class WelcomeScreen extends StatelessWidget {
                 fit: BoxFit.contain,
               ),
               
-              SizedBox(height: 10),
-              
-              // Botones de acción
-              Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => LoginScreen()),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        'Iniciar Sesión',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
+              SizedBox(height: 30),
+                          
+              // Botón único de Login
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => LoginScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 2,
                   ),
-                  
-                  SizedBox(height: 10),
-                  
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          // CAMBIAR ESTA LÍNEA:
-                          // MaterialPageRoute(builder: (context) => RegisterScreen()),
-                          // POR:
-                          MaterialPageRoute(builder: (context) => ProfessionalRegisterScreen()),
-                        );
-                      },
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        side: BorderSide(color: Colors.blue),
-                      ),
-                      child: Text(
-                        'Regístrate',
-                        style: TextStyle(fontSize: 16, color: Colors.blue),
-                      ),
-                    ),
+                  child: Text(
+                    'Iniciar Sesión',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                ],
+                ),
               ),
               
-              SizedBox(height: 40),
-              
-              // Información adicional
+              SizedBox(height: 20),
+
+
               Text(
-                'Sistema profesional para el registro y seguimiento de vacunación',
+                'Salud digital para una Venezuela más fuerte',
                 style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[500],
+                  fontSize: 16,
+                  color: Colors.blue[600],
                 ),
-                textAlign: TextAlign.center,
+              ),
+              
+              SizedBox(height: 250),
+              Text(
+                '© 2025 - 2026  HealthShield. Todos los derechos reservados.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[400],
+                ),
               ),
             ],
           ),

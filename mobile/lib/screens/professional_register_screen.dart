@@ -32,6 +32,8 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _keyboardVisible = false;
+  String _tipoUsuario = 'professional';
+  bool _isAdmin = false;
 
   @override
   void initState() {
@@ -123,14 +125,26 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
       return;
     }
 
+    // Verificar permisos para crear administrador
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (_tipoUsuario == 'admin' && !(currentUser?.isAdmin ?? false)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Solo administradores pueden crear otros administradores'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     // Cerrar teclado antes de registrar
     FocusScope.of(context).unfocus();
     
     setState(() {
       _isRegistering = true;
     });
-
-    final authService = Provider.of<AuthService>(context, listen: false);
 
     final nuevoUsuario = Usuario(
       username: _usernameController.text,
@@ -142,7 +156,7 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
           ? null 
           : _professionalLicenseController.text,
       isVerified: true,
-      role: 'professional',
+      role: _tipoUsuario,
       isSynced: false,
       createdAt: DateTime.now(),
     );
@@ -159,11 +173,11 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
     if (result['success']) {
       final bool isOffline = result['isOffline'] ?? true;
       
-      String message = '✅ Profesional registrado exitosamente\n\n';
+      String message = '✅ Usuario registrado exitosamente\n\n';
       message += 'Puedes iniciar sesión con:\n';
       message += 'Usuario: ${nuevoUsuario.username}\n';
       message += 'Contraseña: ${_passwordController.text}\n\n';
-      message += 'Rol: Profesional de Salud';
+      message += 'Rol: ${_tipoUsuario == 'admin' ? 'Administrador 👑' : 'Profesional de Salud 👨‍⚕️'}';
       
       if (isOffline) {
         message += '\n\n📱 Los datos se sincronizarán cuando haya conexión.';
@@ -195,9 +209,9 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                Navigator.pushReplacementNamed(context, '/login');
+                Navigator.pop(context, true); // Retornar éxito para refrescar lista
               },
-              child: Text('Ir al Login'),
+              child: Text('Aceptar'),
             ),
           ],
         ),
@@ -266,14 +280,17 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    final authService = Provider.of<AuthService>(context);
+    final currentUser = authService.currentUser;
+    final puedeCrearAdmin = currentUser?.isAdmin ?? false;
     
     return Scaffold(
       resizeToAvoidBottomInset: false, // CRÍTICO para rendimiento
       appBar: AppBar(
         title: Text(
-          'HealthShield',
+          'Crear Nuevo Usuario',
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
             color: Colors.blue,
           ),
@@ -307,18 +324,79 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Registro de Profesional',
-                            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                            'Registro de Usuario',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                           ),
                           
                           SizedBox(height: 8),
                           
                           Text(
-                            'Crear cuenta para profesionales de la salud',
+                            'Crear nueva cuenta de usuario',
                             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                           ),
                           
-                          SizedBox(height: 32),
+                          SizedBox(height: 24),
+                          
+                          // Tipo de Usuario
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Tipo de Usuario *', style: TextStyle(fontWeight: FontWeight.bold)),
+                              SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ChoiceChip(
+                                      label: Text('Profesional'),
+                                      selected: _tipoUsuario == 'professional',
+                                      selectedColor: Colors.blue,
+                                      onSelected: (selected) {
+                                        if (selected) {
+                                          setState(() {
+                                            _tipoUsuario = 'professional';
+                                            _isAdmin = false;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  SizedBox(width: 16),
+                                  Expanded(
+                                    child: ChoiceChip(
+                                      label: Text('Administrador'),
+                                      selected: _tipoUsuario == 'admin',
+                                      selectedColor: Colors.red,
+                                      onSelected: puedeCrearAdmin ? (selected) {
+                                        if (selected) {
+                                          setState(() {
+                                            _tipoUsuario = 'admin';
+                                            _isAdmin = true;
+                                          });
+                                        }
+                                      } : null,
+                                      disabledColor: Colors.grey[300],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                _tipoUsuario == 'admin' 
+                                    ? (puedeCrearAdmin 
+                                        ? '👑 Usuario con permisos completos del sistema'
+                                        : '❌ Solo administradores pueden crear otros administradores')
+                                    : '👨‍⚕️ Usuario con permisos profesionales',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _tipoUsuario == 'admin' 
+                                      ? (puedeCrearAdmin ? Colors.orange[700] : Colors.red)
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          SizedBox(height: 24),
                           
                           // Usuario
                           _buildTextField(
@@ -453,9 +531,11 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
                               width: double.infinity,
                               height: 50,
                               child: ElevatedButton(
-                                onPressed: _isRegistering ? null : _completeRegistration,
+                                onPressed: (_isRegistering || (_tipoUsuario == 'admin' && !puedeCrearAdmin)) 
+                                    ? null 
+                                    : _completeRegistration,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: _tipoUsuario == 'admin' ? Colors.red : Colors.green,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -464,7 +544,9 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
                                 child: _isRegistering
                                     ? CircularProgressIndicator(color: Colors.white)
                                     : Text(
-                                        'Registrarse como Profesional',
+                                        _tipoUsuario == 'admin' 
+                                            ? 'Registrar como Administrador'
+                                            : 'Registrar como Profesional',
                                         style: TextStyle(fontSize: 16),
                                       ),
                               ),
@@ -480,22 +562,39 @@ class _ProfessionalRegisterScreenState extends State<ProfessionalRegisterScreen>
                                 children: [
                                   Row(
                                     children: [
-                                      Icon(Icons.medical_services, color: Colors.blue),
+                                      Icon(
+                                        _tipoUsuario == 'admin' 
+                                            ? Icons.admin_panel_settings 
+                                            : Icons.medical_services, 
+                                        color: _tipoUsuario == 'admin' ? Colors.red : Colors.blue
+                                      ),
                                       SizedBox(width: 8),
                                       Text(
-                                        'Cuenta de Profesional',
-                                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                                        _tipoUsuario == 'admin' 
+                                            ? 'Cuenta de Administrador'
+                                            : 'Cuenta de Profesional',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold, 
+                                          color: _tipoUsuario == 'admin' ? Colors.red : Colors.blue
+                                        ),
                                       ),
                                     ],
                                   ),
                                   SizedBox(height: 8),
-                                  Text('• Acceso completo a todas las funciones'),
-                                  Text('• Puede registrar vacunas y pacientes'),
-                                  Text('• Panel administrativo si es necesario'),
-                                  Text('• Sincronización con el servidor'),
+                                  if (_tipoUsuario == 'admin') ...[
+                                    Text('• Acceso completo a todas las funciones del sistema'),
+                                    Text('• Puede crear y gestionar otros usuarios'),
+                                    Text('• Panel administrativo completo'),
+                                    Text('• Permisos de superusuario'),
+                                  ] else ...[
+                                    Text('• Acceso completo a registro de vacunas y pacientes'),
+                                    Text('• Puede registrar vacunas y pacientes'),
+                                    Text('• Sincronización con el servidor'),
+                                    Text('• Sin acceso administrativo'),
+                                  ],
                                   SizedBox(height: 8),
                                   Text(
-                                    'Nota: No se requiere verificación externa.',
+                                    'Nota: El usuario podrá cambiar su contraseña después.',
                                     style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
                                   ),
                                 ],

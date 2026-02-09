@@ -1,9 +1,16 @@
-
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/vacuna_service.dart';
 import '../services/paciente_service.dart';
+import '../models/vacuna.dart';
+import '../models/paciente.dart';
+import '../models/usuario.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   @override
@@ -16,6 +23,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _totalUsuarios = 0;
   int _pendientesSincronizacion = 0;
   bool _isLoading = true;
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -59,15 +67,318 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _exportarDatos() async {
+    setState(() {
+      _exporting = true;
+    });
+
+    try {
+      // Mostrar opciones de exportación
+      final exportOption = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Exportar Datos'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.medical_services, color: Colors.blue),
+                title: Text('Vacunas'),
+                subtitle: Text('Exportar todos los registros de vacunación'),
+                onTap: () => Navigator.pop(context, 'vacunas'),
+              ),
+              ListTile(
+                leading: Icon(Icons.people, color: Colors.green),
+                title: Text('Pacientes'),
+                subtitle: Text('Exportar lista de pacientes'),
+                onTap: () => Navigator.pop(context, 'pacientes'),
+              ),
+              ListTile(
+                leading: Icon(Icons.person, color: Colors.orange),
+                title: Text('Usuarios'),
+                subtitle: Text('Exportar lista de usuarios'),
+                onTap: () => Navigator.pop(context, 'usuarios'),
+              ),
+              ListTile(
+                leading: Icon(Icons.all_inclusive, color: Colors.purple),
+                title: Text('Todos los datos'),
+                subtitle: Text('Exportar todos los datos del sistema'),
+                onTap: () => Navigator.pop(context, 'todos'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancelar'),
+            ),
+          ],
+        ),
+      );
+
+      if (exportOption == null) {
+        setState(() { _exporting = false; });
+        return;
+      }
+
+      // Obtener el directorio de descargas
+      final directory = await getDownloadsDirectory();
+      if (directory == null) {
+        throw Exception('No se pudo acceder al directorio de descargas');
+      }
+
+      String filePath = '';
+      String fileName = '';
+
+      switch (exportOption) {
+        case 'vacunas':
+          filePath = await _exportarVacunasCSV(directory.path);
+          fileName = 'vacunas.csv';
+          break;
+        case 'pacientes':
+          filePath = await _exportarPacientesCSV(directory.path);
+          fileName = 'pacientes.csv';
+          break;
+        case 'usuarios':
+          filePath = await _exportarUsuariosCSV(directory.path);
+          fileName = 'usuarios.csv';
+          break;
+        case 'todos':
+          filePath = await _exportarTodosCSV(directory.path);
+          fileName = 'healthshield_datos_completos.zip';
+          break;
+      }
+
+      if (filePath.isNotEmpty) {
+        await _mostrarExitoExportacion(filePath, fileName);
+      }
+
+    } catch (e) {
+      print('Error exportando datos: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } finally {
+      setState(() {
+        _exporting = false;
+      });
+    }
+  }
+
+  Future<String> _exportarVacunasCSV(String directoryPath) async {
+    final vacunaService = Provider.of<VacunaService>(context, listen: false);
+    final vacunas = await vacunaService.getVacunas();
+    
+    if (vacunas.isEmpty) {
+      throw Exception('No hay vacunas para exportar');
+    }
+
+    final csvBuffer = StringBuffer();
+    
+    // Encabezados
+    csvBuffer.writeln('ID,Nombre Paciente,Cédula Paciente,Tipo de Vacuna,Fecha Aplicación,Lote,Próxima Dosis,Es Menor,Cédula Tutor,Cédula Propia,Creado En,Sincronizado');
+    
+    // Datos
+    for (final vacuna in vacunas) {
+      final line = [
+        vacuna.id?.toString() ?? '',
+        _escapeCsv(vacuna.nombrePaciente ?? ''),
+        _escapeCsv(vacuna.cedulaPaciente ?? ''),
+        _escapeCsv(vacuna.nombreVacuna),
+        _escapeCsv(vacuna.fechaAplicacion),
+        _escapeCsv(vacuna.lote ?? ''),
+        _escapeCsv(vacuna.proximaDosis ?? ''),
+        vacuna.esMenor ? 'Sí' : 'No',
+        _escapeCsv(vacuna.cedulaTutor ?? ''),
+        _escapeCsv(vacuna.cedulaPropia ?? ''),
+        vacuna.createdAt?.toIso8601String() ?? '',
+        vacuna.isSynced ? 'Sí' : 'No',
+      ].join(',');
+      
+      csvBuffer.writeln(line);
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'vacunas_$timestamp.csv';
+    final filePath = '$directoryPath/$fileName';
+    
+    final file = File(filePath);
+    await file.writeAsString(csvBuffer.toString(), flush: true);
+    
+    return filePath;
+  }
+
+  Future<String> _exportarPacientesCSV(String directoryPath) async {
+    final pacienteService = Provider.of<PacienteService>(context, listen: false);
+    final pacientes = await pacienteService.getPacientes();
+    
+    if (pacientes.isEmpty) {
+      throw Exception('No hay pacientes para exportar');
+    }
+
+    final csvBuffer = StringBuffer();
+    
+    // Encabezados
+    csvBuffer.writeln('ID,Cédula,Nombre,Fecha Nacimiento,Teléfono,Dirección,Creado En,Sincronizado');
+    
+    // Datos
+    for (final paciente in pacientes) {
+      final line = [
+        paciente.id?.toString() ?? '',
+        _escapeCsv(paciente.cedula),
+        _escapeCsv(paciente.nombre),
+        _escapeCsv(paciente.fechaNacimiento),
+        _escapeCsv(paciente.telefono ?? ''),
+        _escapeCsv(paciente.direccion ?? ''),
+        paciente.createdAt?.toIso8601String() ?? '',
+        paciente.isSynced ? 'Sí' : 'No',
+      ].join(',');
+      
+      csvBuffer.writeln(line);
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'pacientes_$timestamp.csv';
+    final filePath = '$directoryPath/$fileName';
+    
+    final file = File(filePath);
+    await file.writeAsString(csvBuffer.toString(), flush: true);
+    
+    return filePath;
+  }
+
+  Future<String> _exportarUsuariosCSV(String directoryPath) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final usuarios = await authService.getUsuarios();
+    
+    if (usuarios.isEmpty) {
+      throw Exception('No hay usuarios para exportar');
+    }
+
+    final csvBuffer = StringBuffer();
+    
+    // Encabezados
+    csvBuffer.writeln('ID,Usuario,Email,Teléfono,Rol,Profesional,Matrícula,Verificado,Creado En,Sincronizado');
+    
+    // Datos
+    for (final usuario in usuarios) {
+      final line = [
+        usuario.id?.toString() ?? '',
+        _escapeCsv(usuario.username),
+        _escapeCsv(usuario.email),
+        _escapeCsv(usuario.telefono ?? ''),
+        _escapeCsv(usuario.role),
+        usuario.isProfessional ? 'Sí' : 'No',
+        _escapeCsv(usuario.professionalLicense ?? ''),
+        usuario.isVerified ? 'Sí' : 'No',
+        usuario.createdAt.toIso8601String(),
+        usuario.isSynced ? 'Sí' : 'No',
+      ].join(',');
+      
+      csvBuffer.writeln(line);
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'usuarios_$timestamp.csv';
+    final filePath = '$directoryPath/$fileName';
+    
+    final file = File(filePath);
+    await file.writeAsString(csvBuffer.toString(), flush: true);
+    
+    return filePath;
+  }
+
+  Future<String> _exportarTodosCSV(String directoryPath) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final folderName = 'HealthShield_Export_$timestamp';
+    final exportDir = Directory('$directoryPath/$folderName');
+    
+    if (!await exportDir.exists()) {
+      await exportDir.create(recursive: true);
+    }
+    
+    // Exportar todos los tipos de datos
+    await _exportarVacunasCSV(exportDir.path);
+    await _exportarPacientesCSV(exportDir.path);
+    await _exportarUsuariosCSV(exportDir.path);
+    
+    // Crear archivo README
+    final readmeContent = '''
+HealthShield - Exportación Completa
+Fecha: ${DateTime.now().toLocal()}
+
+Archivos incluidos:
+1. vacunas_$timestamp.csv - Todos los registros de vacunación
+2. pacientes_$timestamp.csv - Lista de pacientes
+3. usuarios_$timestamp.csv - Usuarios del sistema
+
+Total registros exportados:
+- Vacunas: $_totalVacunas
+- Pacientes: $_totalPacientes
+- Usuarios: $_totalUsuarios
+
+Este archivo fue generado automáticamente por HealthShield.
+    ''';
+    
+    final readmeFile = File('${exportDir.path}/README.txt');
+    await readmeFile.writeAsString(readmeContent, flush: true);
+    
+    return exportDir.path;
+  }
+
+  Future<void> _mostrarExitoExportacion(String filePath, String fileName) async {
+    final file = File(filePath);
+    final fileSize = await file.length();
+    final sizeInKB = (fileSize / 1024).toStringAsFixed(2);
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('✅ Exportación Exitosa'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Archivo exportado correctamente:'),
+            SizedBox(height: 8),
+            Text('📁 $fileName', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 4),
+            Text('📍 ${file.parent.path}'),
+            SizedBox(height: 4),
+            Text('📏 Tamaño: ${sizeInKB} KB'),
+            SizedBox(height: 16),
+            Text(
+              'Los archivos se guardaron en la carpeta de descargas.',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+    
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Exportación de datos - Próximamente')),
+      SnackBar(
+        content: Text('✅ Datos exportados exitosamente'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
-  Future<void> _abrirLogs() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Visualización de logs - Próximamente')),
-    );
+  String _escapeCsv(String field) {
+    if (field.contains(',') || field.contains('"') || field.contains('\n')) {
+      return '"${field.replaceAll('"', '""')}"';
+    }
+    return field;
   }
 
   Widget _buildStatCard(String title, int count, IconData icon, Color color) {
@@ -102,15 +413,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    bool disabled = false,
   }) {
     return Card(
       elevation: 2,
+      color: disabled ? Colors.grey[100] : null,
       child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: onTap,
+        leading: Icon(icon, color: disabled ? Colors.grey : color),
+        title: Text(title, style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: disabled ? Colors.grey : null,
+        )),
+        subtitle: Text(subtitle, style: TextStyle(
+          color: disabled ? Colors.grey : null,
+        )),
+        trailing: disabled ? null : Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: disabled ? null : onTap,
       ),
     );
   }
@@ -131,6 +449,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.person_add),
+            onPressed: () {
+              Navigator.pushNamed(context, '/professional-register');
+            },
+            tooltip: 'Crear Nuevo Usuario',
+          ),
           IconButton(
             icon: Icon(Icons.refresh),
             onPressed: _loadStatistics,
@@ -180,6 +505,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               ],
                             ),
                           ),
+                          IconButton(
+                            icon: Icon(Icons.settings, color: Colors.blue),
+                            onPressed: () {
+                              Navigator.pushNamed(context, '/change-password');
+                            },
+                            tooltip: 'Configuración',
+                          ),
                         ],
                       ),
                     ),
@@ -220,11 +552,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                   _buildActionButton(
                     title: 'Gestionar Usuarios',
-                    subtitle: 'Crear, editar y eliminar usuarios del sistema',
+                    subtitle: 'Ver, editar y eliminar usuarios del sistema',
                     icon: Icons.manage_accounts,
                     color: Colors.purple,
                     onTap: () {
                       Navigator.pushNamed(context, '/admin-usuarios');
+                    },
+                  ),
+
+                  _buildActionButton(
+                    title: 'Crear Nuevo Usuario',
+                    subtitle: 'Registrar nuevo profesional o administrador',
+                    icon: Icons.person_add,
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pushNamed(context, '/professional-register');
                     },
                   ),
 
@@ -260,18 +602,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                   _buildActionButton(
                     title: 'Exportar Datos',
-                    subtitle: 'Exportar datos a Excel o CSV',
-                    icon: Icons.download,
+                    subtitle: 'Exportar datos a CSV (se guarda en Descargas)',
+                    icon: _exporting ? Icons.downloading : Icons.download,
                     color: Colors.teal,
-                    onTap: _exportarDatos,
-                  ),
-
-                  _buildActionButton(
-                    title: 'Ver Logs del Sistema',
-                    subtitle: 'Monitorear actividad y errores',
-                    icon: Icons.history,
-                    color: Colors.brown,
-                    onTap: _abrirLogs,
+                    onTap: _exporting ? () {} : () => _exportarDatos(),
+                    disabled: _exporting,
                   ),
 
                   SizedBox(height: 24),
@@ -307,10 +642,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ),
                           ),
                           ListTile(
-                            leading: Icon(Icons.security, size: 20),
-                            title: Text('Modo Administrador'),
-                            subtitle: Text('Acceso completo al sistema'),
+                            leading: Icon(Icons.folder, size: 20),
+                            title: Text('Descargas de Exportación'),
+                            subtitle: Text('Los archivos CSV se guardan automáticamente en la carpeta de Descargas.'),
                           ),
+                          if (_exporting)
+                            ListTile(
+                              leading: Icon(Icons.downloading, size: 20, color: Colors.blue),
+                              title: Text('Exportando datos...'),
+                              subtitle: Text('Por favor espera'),
+                            ),
                         ],
                       ),
                     ),

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 
 class Usuario {
   int? id;
@@ -100,10 +101,44 @@ class Usuario {
     return username.isEmpty || email.isEmpty || password.isEmpty;
   }
 
-  // SOLO UNA VEZ ESTAS PROPIEDADES - ELIMINA LAS DUPLICADAS
+  // Propiedades computadas
   bool get isAdmin => role == 'admin';
   bool get isProfessionalUser => role == 'professional' || isProfessional;
   bool get isUser => role == 'user';
+
+  // Para mostrar en UI
+  String get tipoUsuarioMostrar {
+    switch (role) {
+      case 'admin':
+        return 'Administrador 👑';
+      case 'professional':
+        return 'Profesional 👨‍⚕️';
+      default:
+        return 'Usuario 👤';
+    }
+  }
+
+  Color get colorRol {
+    switch (role) {
+      case 'admin':
+        return Colors.red;
+      case 'professional':
+        return Colors.blue;
+      default:
+        return Colors.green;
+    }
+  }
+
+  IconData get iconRol {
+    switch (role) {
+      case 'admin':
+        return Icons.admin_panel_settings;
+      case 'professional':
+        return Icons.medical_services;
+      default:
+        return Icons.person;
+    }
+  }
 
   Usuario copyWith({
     int? id,
@@ -135,5 +170,10 @@ class Usuario {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  @override
+  String toString() {
+    return 'Usuario{id: $id, username: $username, email: $email, role: $role}';
   }
 }

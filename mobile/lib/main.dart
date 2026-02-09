@@ -25,6 +25,10 @@ import 'package:healthshield/screens/admin_dashboard_screen.dart';
 import 'package:healthshield/screens/admin_usuarios_screen.dart';
 import 'package:healthshield/screens/gestion_pacientes_screen.dart';
 import 'package:healthshield/screens/paciente_detalle_screen.dart';
+import 'package:healthshield/screens/detalle_usuario_screen.dart';
+
+// Models
+import 'package:healthshield/models/usuario.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,8 +157,6 @@ class MyApp extends StatelessWidget {
               // Pantallas de autenticación (acceso público)
               '/welcome': (context) => WelcomeScreen(),
               '/login': (context) => LoginScreen(),
-              '/register': (context) => ProfessionalRegisterScreen(),
-              '/professional-register': (context) => ProfessionalRegisterScreen(),
               
               // Pantallas principales
               '/main-menu': (context) => _buildProtectedScreen(MainMenuScreen(), context),
@@ -195,6 +197,26 @@ class MyApp extends StatelessWidget {
               // Pantallas de admin (solo para administradores)
               '/admin-dashboard': (context) => _buildAdminProtectedScreen(AdminDashboardScreen(), context),
               '/admin-usuarios': (context) => _buildAdminProtectedScreen(AdminUsuariosScreen(), context),
+              
+              // Registro de profesionales (solo admin)
+              '/professional-register': (context) => _buildAdminProtectedScreen(ProfessionalRegisterScreen(), context),
+              
+              // Detalle de usuario (solo admin)
+              '/detalle-usuario': (context) {
+                final args = ModalRoute.of(context)?.settings.arguments;
+                if (args != null && args is Usuario) {
+                  return _buildAdminProtectedScreen(
+                    DetalleUsuarioScreen(usuario: args), 
+                    context
+                  );
+                }
+                return _buildAdminProtectedScreen(
+                  Scaffold(
+                    body: Center(child: Text('Usuario no especificado')),
+                  ), 
+                  context
+                );
+              },
             },
             
             // Manejo de rutas no definidas

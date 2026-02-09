@@ -241,19 +241,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
-                          
-                          // Opción de registro
-                          Center(
-                            child: TextButton(
-                              onPressed: () {
-                                Navigator.pushNamed(context, '/register');
-                              },
-                              child: Text(
-                                '¿No tienes cuenta? Regístrate',
-                                style: TextStyle(color: Colors.blue),
-                              ),
-                            ),
-                          ),
+
                         ],
                       ),
                     ),

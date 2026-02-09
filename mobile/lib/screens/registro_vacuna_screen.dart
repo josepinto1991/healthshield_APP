@@ -649,29 +649,6 @@ class _RegistroVacunaScreenState extends State<RegistroVacunaScreen> {
                               
                               SizedBox(height: 16),
                               
-                              // Botón para registrar otro
-                              Container(
-                                width: double.infinity,
-                                height: 50,
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    // Limpiar solo los campos de vacuna
-                                    _tipoVacunaController.clear();
-                                    _loteController.clear();
-                                    _proximaDosisController.clear();
-                                    _fechaVacunacion = DateTime.now();
-                                    FocusScope.of(context).unfocus();
-                                    
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Listo para registrar otra vacuna para ${_nombreController.text}'),
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  },
-                                  child: Text('Registrar Otra Vacuna para Este Paciente'),
-                                ),
-                              ),
                               
                               // Espacio extra cuando hay teclado
                               SizedBox(height: _keyboardVisible ? 100 : 24),

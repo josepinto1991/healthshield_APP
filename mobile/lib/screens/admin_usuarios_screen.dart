@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../models/usuario.dart';
+import 'detalle_usuario_screen.dart';
+import 'professional_register_screen.dart';
 
 class AdminUsuariosScreen extends StatefulWidget {
   @override
@@ -33,68 +35,14 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
     });
   }
 
-  Future<void> _crearUsuarioAdmin() async {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Crear Usuario Admin'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('¿Crear usuario administrador por defecto?'),
-            SizedBox(height: 16),
-            Text('Usuario: admin'),
-            Text('Contraseña: admin123'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _crearAdmin();
-            },
-            child: Text('Crear'),
-          ),
-        ],
-      ),
+  Future<void> _crearNuevoUsuario() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ProfessionalRegisterScreen()),
     );
-  }
-
-  Future<void> _crearAdmin() async {
-    final nuevoUsuario = Usuario(
-      username: 'admin',
-      email: 'admin@healthshield.com',
-      password: 'admin123',
-      role: 'admin',
-      isProfessional: true,
-      professionalLicense: 'ADM-001',
-      isVerified: true,
-      isSynced: true,
-      createdAt: DateTime.now(),
-    );
-
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final success = await authService.registrarUsuario(nuevoUsuario);
     
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Usuario admin creado'),
-          backgroundColor: Colors.green,
-        ),
-      );
+    if (result == true) {
       await _loadUsuarios();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error creando usuario o usuario ya existe'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -107,7 +55,7 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Rol actualizado a $nuevoRol'),
+          content: Text('✅ Rol actualizado a ${nuevoRol.toUpperCase()}'),
           backgroundColor: Colors.green,
         ),
       );
@@ -124,21 +72,33 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
 
   Widget _buildRoleChip(String role) {
     Color color;
+    IconData icon;
+    
     switch (role) {
       case 'admin':
         color = Colors.red;
+        icon = Icons.admin_panel_settings;
         break;
       case 'professional':
         color = Colors.blue;
+        icon = Icons.medical_services;
         break;
       default:
         color = Colors.green;
+        icon = Icons.person;
     }
     
     return Chip(
-      label: Text(
-        role.toUpperCase(),
-        style: TextStyle(color: Colors.white, fontSize: 10),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          SizedBox(width: 4),
+          Text(
+            role.toUpperCase(),
+            style: TextStyle(color: Colors.white, fontSize: 10),
+          ),
+        ],
       ),
       backgroundColor: color,
     );
@@ -147,7 +107,6 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    // CORRECCIÓN: Usar currentUser en lugar de getUsuarioActual()
     final currentUser = authService.currentUser;
     
     // Filtrar usuarios según búsqueda
@@ -155,7 +114,8 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
         ? _usuarios
         : _usuarios.where((user) =>
             user.username.toLowerCase().contains(_searchController.text.toLowerCase()) ||
-            (user.email?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false))
+            (user.email?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false) ||
+            (user.telefono?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false))
           .toList();
 
     return Scaffold(
@@ -168,9 +128,9 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
         actions: [
           if (currentUser?.isAdmin ?? false)
             IconButton(
-              icon: Icon(Icons.add),
-              onPressed: _crearUsuarioAdmin,
-              tooltip: 'Crear usuario admin',
+              icon: Icon(Icons.person_add),
+              onPressed: _crearNuevoUsuario,
+              tooltip: 'Crear nuevo usuario',
             ),
           IconButton(
             icon: Icon(Icons.refresh),
@@ -188,7 +148,7 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 labelText: 'Buscar usuarios',
-                hintText: 'Por nombre o email',
+                hintText: 'Por nombre, email o teléfono',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
                 suffixIcon: IconButton(
@@ -202,6 +162,32 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
               onChanged: (value) => setState(() {}),
             ),
           ),
+
+          // Estadísticas rápidas
+          if (filteredUsuarios.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatChip(
+                    filteredUsuarios.where((u) => u.isAdmin).length,
+                    'Admin',
+                    Colors.red,
+                  ),
+                  _buildStatChip(
+                    filteredUsuarios.where((u) => u.isProfessionalUser).length,
+                    'Profesionales',
+                    Colors.blue,
+                  ),
+                  _buildStatChip(
+                    filteredUsuarios.length,
+                    'Total',
+                    Colors.green,
+                  ),
+                ],
+              ),
+            ),
 
           Expanded(
             child: _isLoading
@@ -219,9 +205,10 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
                             ),
                             SizedBox(height: 16),
                             if (currentUser?.isAdmin ?? false)
-                              ElevatedButton(
-                                onPressed: _crearUsuarioAdmin,
-                                child: Text('Crear Usuario Admin'),
+                              ElevatedButton.icon(
+                                onPressed: _crearNuevoUsuario,
+                                icon: Icon(Icons.person_add),
+                                label: Text('Crear Primer Usuario'),
                               ),
                           ],
                         ),
@@ -236,55 +223,97 @@ class _AdminUsuariosScreenState extends State<AdminUsuariosScreen> {
                             margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: usuario.isAdmin ? Colors.red : Colors.blue,
+                                backgroundColor: usuario.colorRol,
                                 child: Icon(
-                                  usuario.isAdmin ? Icons.admin_panel_settings : Icons.person,
+                                  usuario.iconRol,
                                   color: Colors.white,
+                                  size: 20,
                                 ),
                               ),
-                              title: Text(usuario.username),
+                              title: Text(
+                                usuario.username,
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (usuario.email != null) Text(usuario.email!),
+                                  if (usuario.email != null) 
+                                    Text(usuario.email!, style: TextStyle(fontSize: 12)),
                                   SizedBox(height: 4),
                                   _buildRoleChip(usuario.role),
                                   if (usuario.isProfessional)
                                     Chip(
                                       label: Text('PROFESIONAL'),
                                       backgroundColor: Colors.blue[100],
+                                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 0),
                                     ),
                                 ],
                               ),
-                              trailing: !isCurrentUser && (currentUser?.isAdmin ?? false)
-                                  ? PopupMenuButton<String>(
-                                      onSelected: (value) => _cambiarRol(usuario, value),
-                                      itemBuilder: (context) => [
-                                        PopupMenuItem(
-                                          value: 'user',
-                                          child: Text('Cambiar a Usuario'),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'professional',
-                                          child: Text('Cambiar a Profesional'),
-                                        ),
-                                        if (currentUser?.isAdmin ?? false)
-                                          PopupMenuItem(
-                                            value: 'admin',
-                                            child: Text('Cambiar a Administrador'),
-                                          ),
-                                      ],
+                              trailing: isCurrentUser
+                                  ? Chip(
+                                      label: Text('TÚ', style: TextStyle(color: Colors.white)),
+                                      backgroundColor: Colors.blue,
                                     )
-                                  : isCurrentUser
-                                      ? Chip(
-                                          label: Text('TÚ', style: TextStyle(color: Colors.white)),
-                                          backgroundColor: Colors.blue,
-                                        )
-                                      : null,
+                                  : Icon(Icons.arrow_forward_ios, size: 14),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => DetalleUsuarioScreen(usuario: usuario),
+                                  ),
+                                ).then((value) {
+                                  if (value == true) {
+                                    _loadUsuarios();
+                                  }
+                                });
+                              },
                             ),
                           );
                         },
                       ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatChip(int count, String label, Color color) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
