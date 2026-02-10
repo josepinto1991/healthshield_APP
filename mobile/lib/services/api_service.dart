@@ -328,12 +328,23 @@ class ApiService {
 
   // ========== SINCRONIZACIÓN ==========
   Future<Map<String, dynamic>> bulkSync(List<Vacuna> vacunas) async {
-    final vacunasData = vacunas.map((v) => v.toServerJson()).toList();
+    final vacunasData = vacunas.map((v) {
+      final data = v.toServerJson();
+      print('📦 Vacuna para sync: ${v.nombrePaciente} - Cédula: ${v.cedulaPaciente}');
+      print('📦 Datos completos: $data');
+      return data;
+    }).toList();
+    
+    // Agregar datos dummy de pacientes (si aplica)
+    final pacientesData = []; // Llenar con pacientes si es necesario
     
     return await _makeRequest(
       method: 'POST',
       endpoint: '/sync/bulk',
-      body: {'vacunas': vacunasData},
+      body: {
+        'pacientes': pacientesData,
+        'vacunas': vacunasData,
+      },
       requireAuth: true,
     );
   }
