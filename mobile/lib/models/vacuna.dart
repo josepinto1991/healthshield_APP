@@ -83,20 +83,22 @@ class Vacuna {
     };
   }
 
-  // ✅ AGREGAR ESTE MÉTODO QUE FALTA
   Map<String, dynamic> toServerJson() {
     return {
-      'paciente_id': pacienteServerId ?? pacienteId,
-      'nombre_vacuna': nombreVacuna,
+      'paciente_id': pacienteId ?? 1, 
+      'paciente_server_id': pacienteServerId,
+      'nombre_vacuna': nombreVacuna.length < 2 ? 'Vacunado' : nombreVacuna,
       'fecha_aplicacion': fechaAplicacion,
       'lote': lote,
       'proxima_dosis': proximaDosis,
-      'local_id': id,
-      'nombre_paciente': nombrePaciente,
-      'cedula_paciente': cedulaPaciente,
+      'usuario_id': usuarioId,
+      'local_id': id,  // ID local para mapeo
+      'server_id': serverId,
       'es_menor': esMenor,
       'cedula_tutor': cedulaTutor,
       'cedula_propia': cedulaPropia,
+      'nombre_paciente': nombrePaciente,
+      'cedula_paciente': cedulaPaciente,
     };
   }
 

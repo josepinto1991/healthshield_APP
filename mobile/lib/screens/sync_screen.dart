@@ -166,15 +166,26 @@ class _SyncScreenState extends State<SyncScreen> {
         return;
       }
       
-      await syncService.manualSync();
+      // 🔥 AHORA SINCRONIZA USUARIOS Y VACUNAS
+      final result = await syncService.fullBidirectionalSync();
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sincronización completada exitosamente.'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (result['success']) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Sincronización completada: ${result['synced_users']} usuarios, ${result['synced_vacunas']} vacunas'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ Sincronización parcial: ${result['message']}'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
       
       await _loadSyncStatus();
       
@@ -188,7 +199,7 @@ class _SyncScreenState extends State<SyncScreen> {
       } else if (e.toString().contains('timeout')) {
         errorMessage = 'Tiempo de espera agotado. El servidor puede estar muy lento o caído.';
       } else {
-        errorMessage = 'Error en la sincronización. Verifica tu conexión.';
+        errorMessage = 'Error en la sincronización: $e';
       }
       
       setState(() {
@@ -200,7 +211,7 @@ class _SyncScreenState extends State<SyncScreen> {
         SnackBar(
           content: Text(errorMessage),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
+          duration: Duration(seconds: 3),
         ),
       );
     } finally {
@@ -464,8 +475,8 @@ class _SyncScreenState extends State<SyncScreen> {
                         Colors.green,
                       ),
                       _buildStatusItem(
-                        'Operaciones pendientes',
-                        _syncStatus['operaciones_pendientes']?.toString() ?? '0',
+                        'Total pendientes',
+                        _syncStatus['total_pendientes']?.toString() ?? '0',
                         Icons.sync,
                         Colors.orange,
                       ),

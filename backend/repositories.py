@@ -172,23 +172,11 @@ class VacunaRepository:
     
     @staticmethod
     def create(db: Session, vacuna_data) -> Vacuna:
-        from repositories import PacienteRepository
+        # 🔥 CAMBIO: NO validar existencia de paciente
+        # Simplemente usar el paciente_id que viene (o None)
+        paciente_id = getattr(vacuna_data, 'paciente_id', None)
         
-        # Verificar que el paciente existe
-        paciente_id = vacuna_data.paciente_id
-        paciente = PacienteRepository.get_by_id(db, paciente_id)
-        
-        if not paciente:
-            # Intentar buscar por server_id si existe paciente_server_id
-            if hasattr(vacuna_data, 'paciente_server_id') and vacuna_data.paciente_server_id:
-                paciente = PacienteRepository.get_by_server_id(db, vacuna_data.paciente_server_id)
-                if paciente:
-                    paciente_id = paciente.id
-        
-        if not paciente:
-            raise ValueError("Paciente no encontrado")
-        
-        # Buscar por server_id si existe
+        # 🔥 Buscar por server_id si existe
         existing_vacuna = None
         if hasattr(vacuna_data, 'server_id') and vacuna_data.server_id:
             existing_vacuna = VacunaRepository.get_by_server_id(db, vacuna_data.server_id)
@@ -215,7 +203,7 @@ class VacunaRepository:
             # Crear nueva vacuna
             db_vacuna = Vacuna(
                 server_id=getattr(vacuna_data, 'server_id', None),
-                paciente_id=paciente_id,
+                paciente_id=paciente_id,  # Puede ser None y está bien
                 paciente_server_id=getattr(vacuna_data, 'paciente_server_id', None),
                 nombre_vacuna=vacuna_data.nombre_vacuna,
                 fecha_aplicacion=vacuna_data.fecha_aplicacion,
@@ -227,7 +215,7 @@ class VacunaRepository:
                 cedula_propia=getattr(vacuna_data, 'cedula_propia', None),
                 nombre_paciente=getattr(vacuna_data, 'nombre_paciente', None),
                 cedula_paciente=getattr(vacuna_data, 'cedula_paciente', None),
-                is_synced=True  # Cuando se crea desde el servidor, está sincronizado
+                is_synced=True
             )
             db.add(db_vacuna)
             db.commit()

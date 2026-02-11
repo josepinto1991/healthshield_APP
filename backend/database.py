@@ -284,6 +284,23 @@ def init_db():
         
         logger.info("✅ Tablas creadas exitosamente")
         
+        try:
+            with engine.connect() as conn:
+                # Verificar si ya existe un paciente por defecto
+                result = conn.execute(text("SELECT COUNT(*) FROM pacientes WHERE cedula = '00000000'"))
+                count = result.scalar()
+                
+                if count == 0:
+                    # Crear paciente por defecto
+                    conn.execute(text("""
+                        INSERT INTO pacientes (cedula, nombre, fecha_nacimiento, telefono, direccion, is_synced)
+                        VALUES ('00000000', 'Paciente Por Defecto', '2000-01-01', '0000000000', 'Dirección por defecto', true)
+                    """))
+                    conn.commit()
+                    logger.info("✅ Paciente por defecto creado")
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo crear paciente por defecto: {e}")
+
         # Verificar tablas creadas
         with engine.connect() as conn:
             result = conn.execute(text("""

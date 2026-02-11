@@ -26,6 +26,7 @@ import 'package:healthshield/screens/admin_usuarios_screen.dart';
 import 'package:healthshield/screens/gestion_pacientes_screen.dart';
 import 'package:healthshield/screens/paciente_detalle_screen.dart';
 import 'package:healthshield/screens/detalle_usuario_screen.dart';
+import 'package:healthshield/screens/verificar_profesional_screen.dart';
 
 // Models
 import 'package:healthshield/models/usuario.dart'; 
@@ -86,9 +87,11 @@ class MyApp extends StatelessWidget {
           create: (context) {
             final cacheService = context.read<CacheService>();
             final apiService = context.read<ApiService>();
+            final vacunaService = context.read<VacunaService>();
             return BidirectionalSyncService(
               cacheService: cacheService,
               apiService: apiService,
+              vacunaService: vacunaService, 
             );
           },
         ),
@@ -168,6 +171,8 @@ class MyApp extends StatelessWidget {
               '/sync': (context) => _buildProtectedScreen(SyncScreen(), context),
               '/change-password': (context) => _buildProtectedScreen(ChangePasswordScreen(), context),
               '/gestion-pacientes': (context) => _buildProtectedScreen(GestionPacientesScreen(), context),
+
+              '/verificar-profesional': (context) => _buildAdminProtectedScreen(VerificarProfesionalScreen(), context),
               
               // Nueva pantalla de detalles del paciente
               '/paciente-detalle': (context) {

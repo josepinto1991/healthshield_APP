@@ -879,6 +879,16 @@ Para compartir los archivos:
                   SizedBox(height: 16),
 
                   _buildActionButton(
+                    title: 'Verificar Profesional',
+                    subtitle: 'Consultar cédula profesional en registro SACS',
+                    icon: Icons.verified_user,
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pushNamed(context, '/verificar-profesional');
+                    },
+                  ),
+
+                  _buildActionButton(
                     title: 'Gestionar Usuarios',
                     subtitle: 'Ver, editar y eliminar usuarios del sistema',
                     icon: Icons.manage_accounts,

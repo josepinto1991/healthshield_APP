@@ -5,11 +5,13 @@ import 'package:http/http.dart' as http;
 import '../models/usuario.dart';
 import '../models/vacuna.dart';
 import '../models/paciente.dart';
+import '../utils/app_config.dart';
 
 class ApiService {
   // Configuración de la API
-  static const String baseUrl = 'https://healthshield-app.vercel.app/';
-  
+  // static const String baseUrl = 'https://healthshield-app.vercel.app/';
+  static const String baseUrl = AppConfig.apiBaseUrl;
+
   // 🔧 NUEVO: Timeouts ajustados
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
@@ -208,7 +210,7 @@ class ApiService {
   Future<Map<String, dynamic>> registerProfessional(Usuario usuario, String cedula) async {
     return await _makeRequest(
       method: 'POST',
-      endpoint: '/auth/register',
+      endpoint: '/api/auth/register',
       body: {
         ...usuario.toServerJson(),
         'cedula_verificacion': cedula,
@@ -220,7 +222,7 @@ class ApiService {
   Future<Map<String, dynamic>> login(String username, String password) async {
     final result = await _makeRequest(
       method: 'POST',
-      endpoint: '/auth/login',
+      endpoint: '/api/auth/login',
       body: {
         'username': username,
         'password': password,
@@ -237,7 +239,7 @@ class ApiService {
   Future<Map<String, dynamic>> register(Usuario usuario) async {
     final result = await _makeRequest(
       method: 'POST',
-      endpoint: '/auth/register',
+      endpoint: '/api/auth/register',
       body: usuario.toServerJson(),
     );
     
@@ -251,7 +253,7 @@ class ApiService {
   Future<Map<String, dynamic>> syncUser(Usuario usuario) async {
     return await _makeRequest(
       method: 'POST',
-      endpoint: '/auth/register',
+      endpoint: '/api/auth/register',
       body: usuario.toServerJson(),
     );
   }
@@ -260,7 +262,7 @@ class ApiService {
   Future<Map<String, dynamic>> crearPaciente(Paciente paciente) async {
     return await _makeRequest(
       method: 'POST',
-      endpoint: '/pacientes',
+      endpoint: '/api/pacientes',
       body: paciente.toServerJson(),
       requireAuth: true,
     );
@@ -269,7 +271,7 @@ class ApiService {
   Future<Map<String, dynamic>> getPacientes() async {
     return await _makeRequest(
       method: 'GET',
-      endpoint: '/pacientes',
+      endpoint: '/api/pacientes',
       requireAuth: true,
     );
   }
@@ -278,7 +280,7 @@ class ApiService {
     return await _makeRequest(
       method: 'GET',
       // 🔧 CORREGIDO: Usar Uri.encodeComponent en lugar de Uri.encodeQueryComponent
-      endpoint: '/pacientes/buscar?q=${Uri.encodeComponent(query)}',
+      endpoint: '/api/pacientes/buscar?q=${Uri.encodeComponent(query)}',
       requireAuth: true,
     );
   }
@@ -287,17 +289,30 @@ class ApiService {
     return await _makeRequest(
       method: 'GET',
       // 🔧 CORREGIDO: Usar Uri.encodeComponent en lugar de Uri.encodePathComponent
-      endpoint: '/pacientes/cedula/${Uri.encodeComponent(cedula)}',
+      endpoint: '/api/pacientes/cedula/${Uri.encodeComponent(cedula)}',
       requireAuth: true,
     );
   }
 
   // ========== VACUNAS ==========
   Future<Map<String, dynamic>> crearVacuna(Vacuna vacuna) async {
+    final vacunaData = vacuna.toServerJson();
+    
+    // 🔥 Asegurar que paciente_id sea un número válido
+    if (vacunaData['paciente_id'] == null) {
+      vacunaData['paciente_id'] = 0; // O 1, o el ID de un paciente por defecto
+    }
+    
+    // 🔥 Asegurar que los nombres de vacuna sean válidos
+    if (vacunaData['nombre_vacuna'] != null && 
+        (vacunaData['nombre_vacuna'] as String).length < 2) {
+      vacunaData['nombre_vacuna'] = 'Vacuna'; // Nombre por defecto
+    }
+    
     return await _makeRequest(
       method: 'POST',
-      endpoint: '/vacunas',
-      body: vacuna.toServerJson(),
+      endpoint: '/api/vacunas',
+      body: vacunaData,
       requireAuth: true,
     );
   }
@@ -305,7 +320,7 @@ class ApiService {
   Future<Map<String, dynamic>> getVacunasFromServer() async {
     return await _makeRequest(
       method: 'GET',
-      endpoint: '/vacunas',
+      endpoint: '/api/vacunas',
       requireAuth: true,
     );
   }
@@ -317,7 +332,7 @@ class ApiService {
   Future<Map<String, dynamic>> getVacunasByPaciente(int pacienteId) async {
     return await _makeRequest(
       method: 'GET',
-      endpoint: '/pacientes/$pacienteId/vacunas',
+      endpoint: '/api/pacientes/$pacienteId/vacunas',
       requireAuth: true,
     );
   }
@@ -328,22 +343,61 @@ class ApiService {
 
   // ========== SINCRONIZACIÓN ==========
   Future<Map<String, dynamic>> bulkSync(List<Vacuna> vacunas) async {
+    print('📤 Enviando ${vacunas.length} vacunas en bulk sync...');
+    
+    // Preparar datos para pacientes (vacío si solo tenemos vacunas)
+    final pacientesData = []; 
+    
+    // Preparar datos de vacunas
     final vacunasData = vacunas.map((v) {
       final data = v.toServerJson();
-      print('📦 Vacuna para sync: ${v.nombrePaciente} - Cédula: ${v.cedulaPaciente}');
-      print('📦 Datos completos: $data');
+      
+      // 🔥 CORREGIR: Asegurar que paciente_id sea un número válido
+      if (data['paciente_id'] == null) {
+        data['paciente_id'] = 1; // ID de paciente por defecto
+      }
+      
+      // 🔥 CORREGIR: Asegurar que nombre_vacuna tenga al menos 2 caracteres
+      if (data['nombre_vacuna'] != null && 
+          (data['nombre_vacuna'] as String).length < 2) {
+        data['nombre_vacuna'] = 'Vacuna'; // Nombre por defecto
+      }
+      
+      // Asegurar que los campos necesarios estén presentes
+      if (!data.containsKey('es_menor')) {
+        data['es_menor'] = v.esMenor;
+      }
+      if (!data.containsKey('cedula_tutor')) {
+        data['cedula_tutor'] = v.cedulaTutor;
+      }
+      if (!data.containsKey('cedula_propia')) {
+        data['cedula_propia'] = v.cedulaPropia;
+      }
+      if (!data.containsKey('nombre_paciente')) {
+        data['nombre_paciente'] = v.nombrePaciente;
+      }
+      if (!data.containsKey('cedula_paciente')) {
+        data['cedula_paciente'] = v.cedulaPaciente;
+      }
+      
+      // Agregar local_id si no está presente
+      if (!data.containsKey('local_id') && v.id != null) {
+        data['local_id'] = v.id;
+      }
+      
+      print('📦 Vacuna para bulk sync: ${v.nombrePaciente} - Cédula: ${v.cedulaPaciente} - paciente_id: ${data['paciente_id']}');
       return data;
     }).toList();
     
-    // Agregar datos dummy de pacientes (si aplica)
-    final pacientesData = []; // Llenar con pacientes si es necesario
+    print('📤 Total de vacunas preparadas: ${vacunasData.length}');
     
     return await _makeRequest(
       method: 'POST',
-      endpoint: '/sync/bulk',
+      endpoint: '/api/sync/bulk',
       body: {
         'pacientes': pacientesData,
         'vacunas': vacunasData,
+        'last_sync_client': DateTime.now().toIso8601String(),
       },
       requireAuth: true,
     );
@@ -353,7 +407,7 @@ class ApiService {
     return await _makeRequest(
       method: 'GET',
       // 🔧 CORREGIDO: Usar Uri.encodeComponent
-      endpoint: '/sync/updates?last_sync=${Uri.encodeComponent(lastSync)}',
+      endpoint: '/api/sync/updates?last_sync=${Uri.encodeComponent(lastSync)}',
       requireAuth: true,
     );
   }
@@ -366,7 +420,7 @@ class ApiService {
   }) async {
     return await _makeRequest(
       method: 'POST',
-      endpoint: '/users/change-password',
+      endpoint: '/api/users/change-password',
       body: {
         'current_password': currentPassword,
         'new_password': newPassword,

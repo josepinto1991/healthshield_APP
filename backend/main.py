@@ -385,6 +385,7 @@ async def register_user(
                 is_professional=db_usuario.is_professional,
                 professional_license=db_usuario.professional_license,
                 is_verified=db_usuario.is_verified,
+                is_synced=db_usuario.is_synced,  # ✅ AGREGADO
                 created_at=db_usuario.created_at,
                 updated_at=db_usuario.updated_at
             ),
@@ -896,29 +897,26 @@ async def bulk_sync(
     token: Optional[str] = Query(None),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ):
-    """Sincronización masiva desde cliente Flutter - VERSIÓN CORREGIDA"""
+    """Sincronización masiva desde cliente Flutter"""
     current_user = get_current_user(token=token, credentials=credentials, db=db)
+    
+    logger.info(f"📥 BULK SYNC iniciado por: {current_user.username}")
+    logger.info(f"📊 Datos recibidos: {len(sync_data.pacientes)} pacientes, {len(sync_data.vacunas)} vacunas")
     
     pacientes_ids = {}
     vacunas_ids = {}
     conflicts = []
     
-    logger.info(f"📥 BULK SYNC iniciado por: {current_user.username}")
-    logger.info(f"📊 Datos recibidos: {len(sync_data.pacientes)} pacientes, {len(sync_data.vacunas)} vacunas")
-    
     try:
-        # 🔄 1. Sincronizar pacientes
+        # 1. Sincronizar pacientes
         for paciente in sync_data.pacientes:
             try:
-                logger.info(f"🔄 Procesando paciente: {paciente.cedula} (local_id: {paciente.local_id})")
+                logger.info(f"🔄 Procesando paciente: {paciente.cedula}")
                 
-                # Verificar si ya existe por cédula
                 existing_paciente = PacienteRepository.get_by_cedula(db, paciente.cedula)
                 
                 if existing_paciente:
-                    # Actualizar paciente existente
-                    logger.info(f"📝 Actualizando paciente existente: {existing_paciente.id}")
-                    
+                    # Actualizar
                     update_data = {
                         'nombre': paciente.nombre,
                         'fecha_nacimiento': paciente.fecha_nacimiento,
@@ -926,146 +924,82 @@ async def bulk_sync(
                         'direccion': paciente.direccion,
                         'is_synced': True
                     }
-                    
                     PacienteRepository.update(db, existing_paciente.id, update_data)
-                    
                     pacientes_ids[str(paciente.local_id)] = {
                         'server_id': existing_paciente.id,
                         'action': 'updated'
                     }
                 else:
-                    # Crear nuevo paciente
-                    logger.info(f"➕ Creando nuevo paciente: {paciente.cedula}")
-                    
+                    # Crear nuevo
                     db_paciente = PacienteRepository.create(db, paciente)
-                    
                     pacientes_ids[str(paciente.local_id)] = {
                         'server_id': db_paciente.id,
                         'action': 'created'
                     }
                     
             except Exception as e:
-                logger.error(f"❌ Error procesando paciente {paciente.cedula}: {e}")
+                logger.error(f"❌ Error paciente {paciente.cedula}: {e}")
                 conflicts.append({
                     'type': 'paciente',
                     'local_id': paciente.local_id,
-                    'cedula': paciente.cedula,
                     'error': str(e)
                 })
         
-        # 🔄 2. Sincronizar vacunas
+        # 2. Sincronizar vacunas
         for vacuna in sync_data.vacunas:
             try:
-                logger.info(f"💉 Procesando vacuna: {vacuna.nombre_vacuna} (local_id: {vacuna.local_id})")
+                # 🔥 ELIMINAR esta validación de paciente:
+                # paciente_server_id = None
+                # if vacuna.paciente_id and str(vacuna.paciente_id) in pacientes_ids:
+                #     paciente_server_id = pacientes_ids[str(vacuna.paciente_id)]['server_id']
+                # elif vacuna.cedula_paciente:
+                #     paciente = PacienteRepository.get_by_cedula(db, vacuna.cedula_paciente)
+                #     if paciente:
+                #         paciente_server_id = paciente.id
+                # 
+                # if not paciente_server_id:
+                #     raise ValueError(f"No se encontró paciente para vacuna: {vacuna.nombre_vacuna}")
                 
-                # Obtener el server_id real del paciente usando el mapeo
-                paciente_server_id = None
+                # 🔥 SIMPLIFICADO: Usar el paciente_id directamente (puede ser None)
+                vacuna_data = VacunaCreate(
+                    paciente_id=vacuna.paciente_id,  # Puede ser None
+                    paciente_server_id=vacuna.paciente_server_id,
+                    nombre_vacuna=vacuna.nombre_vacuna,
+                    fecha_aplicacion=vacuna.fecha_aplicacion,
+                    lote=vacuna.lote,
+                    proxima_dosis=vacuna.proxima_dosis,
+                    usuario_id=vacuna.usuario_id or current_user.id,
+                    es_menor=vacuna.es_menor,
+                    cedula_tutor=vacuna.cedula_tutor,
+                    cedula_propia=vacuna.cedula_propia,
+                    nombre_paciente=vacuna.nombre_paciente,
+                    cedula_paciente=vacuna.cedula_paciente,
+                    local_id=vacuna.local_id,
+                    server_id=vacuna.server_id
+                )
                 
-                if vacuna.paciente_id and str(vacuna.paciente_id) in pacientes_ids:
-                    paciente_server_id = pacientes_ids[str(vacuna.paciente_id)]['server_id']
-                else:
-                    # Buscar por paciente_server_id directo
-                    paciente_server_id = vacuna.paciente_server_id
+                # Crear vacuna
+                db_vacuna = VacunaRepository.create(db, vacuna_data)
                 
-                # Si no tenemos server_id, buscar por cédula del paciente (si está en los datos)
-                if not paciente_server_id and vacuna.cedula_paciente:
-                    paciente = PacienteRepository.get_by_cedula(db, vacuna.cedula_paciente)
-                    if paciente:
-                        paciente_server_id = paciente.id
-                
-                if not paciente_server_id:
-                    raise ValueError(f"No se pudo encontrar paciente para vacuna. "
-                                   f"paciente_id: {vacuna.paciente_id}, "
-                                   f"paciente_server_id: {vacuna.paciente_server_id}, "
-                                   f"cedula_paciente: {vacuna.cedula_paciente}")
-                
-                # Asignar usuario actual si no tiene
-                if not vacuna.usuario_id:
-                    vacuna.usuario_id = current_user.id
-                
-                # Verificar si ya existe esta vacuna
-                existing_vacuna = None
-                
-                if vacuna.server_id:
-                    existing_vacuna = VacunaRepository.get_by_server_id(db, vacuna.server_id)
-                
-                # Preparar datos para creación/actualización
-                vacuna_data_dict = {
-                    'paciente_id': paciente_server_id,
-                    'paciente_server_id': paciente_server_id,  # Ahora sí tenemos el server_id real
-                    'nombre_vacuna': vacuna.nombre_vacuna,
-                    'fecha_aplicacion': vacuna.fecha_aplicacion,
-                    'lote': vacuna.lote,
-                    'proxima_dosis': vacuna.proxima_dosis,
-                    'usuario_id': vacuna.usuario_id,
-                    'es_menor': vacuna.es_menor,
-                    'cedula_tutor': vacuna.cedula_tutor,
-                    'cedula_propia': vacuna.cedula_propia,
-                    'nombre_paciente': vacuna.nombre_paciente,
-                    'cedula_paciente': vacuna.cedula_paciente,
+                vacunas_ids[str(vacuna.local_id)] = {
+                    'server_id': db_vacuna.id,
+                    'action': 'created'
                 }
                 
-                if existing_vacuna:
-                    # Actualizar vacuna existente
-                    logger.info(f"📝 Actualizando vacuna existente: {existing_vacuna.id}")
-                    
-                    VacunaRepository.update(db, existing_vacuna.id, vacuna_data_dict)
-                    
-                    vacunas_ids[str(vacuna.local_id)] = {
-                        'server_id': existing_vacuna.id,
-                        'action': 'updated'
-                    }
-                else:
-                    # Crear nueva vacuna
-                    logger.info(f"➕ Creando nueva vacuna para paciente {paciente_server_id}")
-                    
-                    # Usar el modelo VacunaCreate para validación
-                    vacuna_para_crear = VacunaCreate(
-                        paciente_id=paciente_server_id,
-                        paciente_server_id=paciente_server_id,
-                        nombre_vacuna=vacuna.nombre_vacuna,
-                        fecha_aplicacion=vacuna.fecha_aplicacion,
-                        lote=vacuna.lote,
-                        proxima_dosis=vacuna.proxima_dosis,
-                        usuario_id=vacuna.usuario_id,
-                        es_menor=vacuna.es_menor,
-                        cedula_tutor=vacuna.cedula_tutor,
-                        cedula_propia=vacuna.cedula_propia,
-                        nombre_paciente=vacuna.nombre_paciente,
-                        cedula_paciente=vacuna.cedula_paciente,
-                        local_id=vacuna.local_id,
-                        server_id=vacuna.server_id
-                    )
-                    
-                    db_vacuna = VacunaRepository.create(db, vacuna_para_crear)
-                    
-                    vacunas_ids[str(vacuna.local_id)] = {
-                        'server_id': db_vacuna.id,
-                        'action': 'created'
-                    }
-                    
             except Exception as e:
-                logger.error(f"❌ Error procesando vacuna {vacuna.nombre_vacuna}: {e}")
+                logger.error(f"❌ Error vacuna {vacuna.nombre_vacuna}: {e}")
                 conflicts.append({
                     'type': 'vacuna',
                     'local_id': vacuna.local_id,
-                    'nombre_vacuna': vacuna.nombre_vacuna,
                     'error': str(e)
                 })
         
-        # Commit final
         db.commit()
         
-        logger.info(f"✅ BULK SYNC completado exitosamente")
-        logger.info(f"📊 Resultados: {len(pacientes_ids)} pacientes, {len(vacunas_ids)} vacunas")
-        
-        if conflicts:
-            logger.warning(f"⚠️  Conflictos: {len(conflicts)}")
-            for conflict in conflicts:
-                logger.warning(f"   - {conflict}")
+        logger.info(f"✅ BULK SYNC completado: {len(vacunas_ids)} vacunas sincronizadas")
         
         return BulkSyncResponse(
-            message="Sincronización completada exitosamente",
+            message="Sincronización completada",
             pacientes_sincronizados=len(sync_data.pacientes),
             vacunas_sincronizadas=len(sync_data.vacunas),
             pacientes_ids=pacientes_ids,
@@ -1076,11 +1010,7 @@ async def bulk_sync(
         
     except Exception as e:
         db.rollback()
-        logger.error(f"❌ Error en BULK SYNC: {e}")
-        logger.error("📝 Traceback completo:")
-        import traceback
-        logger.error(traceback.format_exc())
-        
+        logger.error(f"❌ Error en bulk sync: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error en sincronización: {str(e)}"
@@ -1101,7 +1031,7 @@ async def get_updates(
         from datetime import datetime
         last_sync_dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
         
-        updates = []
+        updates = [] 
         
         pacientes = db.query(Paciente).filter(
             Paciente.created_at > last_sync_dt

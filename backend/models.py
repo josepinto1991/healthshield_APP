@@ -13,7 +13,7 @@ class Usuario(Base):
     __tablename__ = 'usuarios'
     
     id = Column(Integer, primary_key=True, index=True)
-    server_id = Column(Integer, nullable=True, index=True)  # Nuevo campo
+    server_id = Column(Integer, nullable=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
@@ -21,8 +21,8 @@ class Usuario(Base):
     is_professional = Column(Boolean, default=False)
     professional_license = Column(String(50))
     is_verified = Column(Boolean, default=False)
-    role = Column(String(20), default='user')  # Nuevo campo: 'admin', 'professional', 'user'
-    is_synced = Column(Boolean, default=False)  # Nuevo campo
+    role = Column(String(20), default='user')
+    is_synced = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -32,43 +32,47 @@ class Paciente(Base):
     __tablename__ = 'pacientes'
     
     id = Column(Integer, primary_key=True, index=True)
-    server_id = Column(Integer, nullable=True, index=True)  # Nuevo campo
+    server_id = Column(Integer, nullable=True, index=True)
     cedula = Column(String(20), unique=True, index=True, nullable=False)
     nombre = Column(String(100), nullable=False)
     fecha_nacimiento = Column(String(10), nullable=False)
     telefono = Column(String(20))
     direccion = Column(Text)
-    is_synced = Column(Boolean, default=False)  # Nuevo campo
+    is_synced = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    vacunas = relationship("Vacuna", back_populates="paciente")
+    # 🔥 IMPORTANTE: ELIMINAR esta relación completamente
+    # vacunas = relationship("Vacuna", back_populates="paciente")  # ← COMENTAR O ELIMINAR
 
 class Vacuna(Base):
     __tablename__ = 'vacunas'
     
     id = Column(Integer, primary_key=True, index=True)
-    server_id = Column(Integer, nullable=True, index=True)  # Nuevo campo
-    paciente_id = Column(Integer, ForeignKey('pacientes.id'), nullable=False)
-    paciente_server_id = Column(Integer, nullable=True)  # Nuevo campo
+    server_id = Column(Integer, nullable=True, index=True)
+    
+    # 🔥 paciente_id es solo un número, NO ForeignKey
+    paciente_id = Column(Integer, nullable=True)
+    
+    paciente_server_id = Column(Integer, nullable=True)
     nombre_vacuna = Column(String(100), nullable=False)
     fecha_aplicacion = Column(String(10), nullable=False)
     lote = Column(String(50))
     proxima_dosis = Column(String(10))
     usuario_id = Column(Integer, ForeignKey('usuarios.id'))
-    is_synced = Column(Boolean, default=False)  # Nuevo campo
+    is_synced = Column(Boolean, default=False)
     
-    # Nuevos campos para la lógica de niños/adultos
     es_menor = Column(Boolean, default=False)
     cedula_tutor = Column(String(20))
     cedula_propia = Column(String(20))
-    nombre_paciente = Column(String(100))  # Para mostrar sin relación
-    cedula_paciente = Column(String(20))   # Para mostrar sin relación
+    nombre_paciente = Column(String(100))
+    cedula_paciente = Column(String(20))
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    paciente = relationship("Paciente", back_populates="vacunas")
+    # 🔥 IMPORTANTE: ELIMINAR esta relación
+    # paciente = relationship("Paciente", back_populates="vacunas")  # ← COMENTAR O ELIMINAR
     usuario = relationship("Usuario", back_populates="vacunas")
 
 # ==================== PYDANTIC SCHEMAS ====================
@@ -135,7 +139,7 @@ class UsuarioResponse(UsuarioBase):
     id: int
     server_id: Optional[int] = None
     is_verified: bool
-    is_synced: bool
+    is_synced: bool = True
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -199,15 +203,14 @@ class PacienteResponse(PacienteBase):
 class VacunaBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
-    paciente_id: int
+    paciente_id: Optional[int] = None 
     paciente_server_id: Optional[int] = None
-    nombre_vacuna: str
+    nombre_vacuna: str 
     fecha_aplicacion: str
     lote: Optional[str] = None
     proxima_dosis: Optional[str] = None
     usuario_id: Optional[int] = None
     
-    # Nuevos campos para la lógica de niños/adultos
     es_menor: bool = False
     cedula_tutor: Optional[str] = None
     cedula_propia: Optional[str] = None

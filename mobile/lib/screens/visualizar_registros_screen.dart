@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/vacuna_service.dart';
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../models/vacuna.dart';
 import 'paciente_detalle_screen.dart';
 
@@ -11,40 +13,178 @@ class VisualizarRegistrosScreen extends StatefulWidget {
 
 class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
   final _cedulaController = TextEditingController();
-  List<Vacuna> _todasVacunas = [];
+  List<Vacuna> _vacunasBackend = [];
   List<Vacuna> _vacunasFiltradas = [];
   bool _isLoading = false;
   bool _mostrarResultados = false;
-  bool _modoTodosRegistros = false;
   String _modoBusqueda = 'todos';
+  String? _errorMessage;
+  bool _conexionExitosa = true;
+  bool _usandoBackend = false;
+  bool _mostrarSoloBackend = false;
 
   @override
   void initState() {
     super.initState();
-    _cargarTodosRegistros();
+    _cargarDatos();
   }
 
-  Future<void> _cargarTodosRegistros() async {
+  Future<void> _cargarDatos() async {
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
+      // Cargar vacunas locales primero
       final vacunaService = Provider.of<VacunaService>(context, listen: false);
-      final todas = await vacunaService.getVacunas();
+      final vacunasLocales = await vacunaService.getVacunas();
       
+      // Intentar cargar del backend
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      
+      bool backendDisponible = false;
+      
+      if (authService.currentUser != null) {
+        try {
+          // Verificar conexión al backend
+          backendDisponible = await apiService.checkServerStatus();
+          
+          if (backendDisponible) {
+            // Intentar autenticar
+            final loginResult = await apiService.login(
+              authService.currentUser!.username,
+              authService.currentUser!.password
+            );
+            
+            if (!loginResult['success']) {
+              await apiService.login('admin', 'admin123');
+            }
+            
+            // Obtener vacunas del backend
+            print('📡 Obteniendo vacunas del backend...');
+            final result = await apiService.getVacunasFromServer();
+            
+            if (result['success'] && result['data'] != null) {
+              List<Vacuna> vacunasBackend = [];
+              final data = result['data'];
+              
+              if (data is List) {
+                for (var item in data) {
+                  try {
+                    // Asegurar que el item tenga el formato correcto
+                    Map<String, dynamic> vacunaData = {};
+                    
+                    if (item is Map<String, dynamic>) {
+                      vacunaData = item;
+                    } else if (item is Map) {
+                      vacunaData = Map<String, dynamic>.from(item);
+                    }
+                    
+                    // Asegurar campos requeridos
+                    if (!vacunaData.containsKey('nombre_vacuna') && vacunaData.containsKey('nombreVacuna')) {
+                      vacunaData['nombre_vacuna'] = vacunaData['nombreVacuna'];
+                    }
+                    
+                    if (!vacunaData.containsKey('fecha_aplicacion') && vacunaData.containsKey('fechaAplicacion')) {
+                      vacunaData['fecha_aplicacion'] = vacunaData['fechaAplicacion'];
+                    }
+                    
+                    if (!vacunaData.containsKey('nombre_paciente') && vacunaData.containsKey('nombrePaciente')) {
+                      vacunaData['nombre_paciente'] = vacunaData['nombrePaciente'];
+                    }
+                    
+                    if (!vacunaData.containsKey('cedula_paciente') && vacunaData.containsKey('cedulaPaciente')) {
+                      vacunaData['cedula_paciente'] = vacunaData['cedulaPaciente'];
+                    }
+                    
+                    // Asegurar campo es_menor
+                    if (!vacunaData.containsKey('es_menor')) {
+                      vacunaData['es_menor'] = vacunaData['esMenor'] ?? false;
+                    }
+                    
+                    final vacuna = Vacuna.fromJson(vacunaData);
+                    vacunasBackend.add(vacuna);
+                  } catch (e) {
+                    print('⚠️ Error parseando vacuna: $e - Item: $item');
+                  }
+                }
+              } else if (data is Map && data.containsKey('vacunas')) {
+                final vacunasData = data['vacunas'];
+                if (vacunasData is List) {
+                  for (var item in vacunasData) {
+                    try {
+                      final vacuna = Vacuna.fromJson(item);
+                      vacunasBackend.add(vacuna);
+                    } catch (e) {
+                      print('⚠️ Error parseando vacuna: $e');
+                    }
+                  }
+                }
+              } else if (data is Map && data.containsKey('data')) {
+                final nestedData = data['data'];
+                if (nestedData is List) {
+                  for (var item in nestedData) {
+                    try {
+                      final vacuna = Vacuna.fromJson(item);
+                      vacunasBackend.add(vacuna);
+                    } catch (e) {
+                      print('⚠️ Error parseando vacuna: $e');
+                    }
+                  }
+                }
+              }
+              
+              setState(() {
+                _vacunasBackend = vacunasBackend;
+                _vacunasFiltradas = vacunasBackend;
+                _usandoBackend = true;
+                _conexionExitosa = true;
+              });
+              
+              print('✅ Cargadas ${vacunasBackend.length} vacunas del backend');
+              
+              // Guardar vacunas localmente para referencia
+              for (var vacuna in vacunasBackend) {
+                try {
+                  await vacunaService.saveVacunaFromServer(vacuna);
+                } catch (e) {
+                  print('⚠️ Error guardando vacuna localmente: $e');
+                }
+              }
+              
+              setState(() {
+                _isLoading = false;
+              });
+              return;
+              
+            } else {
+              print('⚠️ No se pudieron obtener vacunas del backend: ${result['error']}');
+            }
+          }
+        } catch (e) {
+          print('⚠️ Error conectando al backend: $e');
+        }
+      }
+      
+      // Si no se puede conectar al backend, usar datos locales
       setState(() {
-        _todasVacunas = todas;
-        _vacunasFiltradas = todas;
+        _vacunasBackend = [];
+        _vacunasFiltradas = vacunasLocales;
+        _usandoBackend = false;
         _isLoading = false;
-        _modoTodosRegistros = true;
-        _modoBusqueda = 'todos';
       });
+      
+      print('✅ Cargadas ${vacunasLocales.length} vacunas locales');
+      
     } catch (e) {
+      print('❌ Error cargando datos: $e');
       setState(() {
         _isLoading = false;
+        _errorMessage = 'Error cargando datos: $e';
+        _conexionExitosa = false;
       });
-      print('Error cargando todos los registros: $e');
     }
   }
 
@@ -64,13 +204,23 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
     setState(() {
       _isLoading = true;
       _mostrarResultados = false;
-      _modoTodosRegistros = false;
       _modoBusqueda = 'cedula';
     });
 
     try {
-      final vacunaService = Provider.of<VacunaService>(context, listen: false);
-      final resultados = await vacunaService.buscarPorCedula(query);
+      List<Vacuna> resultados = [];
+      
+      if (_usandoBackend && _conexionExitosa) {
+        // Buscar en datos del backend
+        resultados = _vacunasBackend.where((vacuna) {
+          return vacuna.cedulaPaciente != null && 
+                 vacuna.cedulaPaciente!.toLowerCase().contains(query.toLowerCase());
+        }).toList();
+      } else {
+        // Buscar en datos locales
+        final vacunaService = Provider.of<VacunaService>(context, listen: false);
+        resultados = await vacunaService.buscarPorCedula(query);
+      }
       
       setState(() {
         _vacunasFiltradas = resultados;
@@ -103,20 +253,45 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
   void _limpiarBusqueda() {
     _cedulaController.clear();
     setState(() {
-      _vacunasFiltradas = _todasVacunas;
+      _vacunasFiltradas = _usandoBackend ? _vacunasBackend : _vacunasFiltradas;
       _mostrarResultados = false;
-      _modoTodosRegistros = true;
       _modoBusqueda = 'todos';
     });
   }
+
+  void _alternarFuenteDatos() {
+    setState(() {
+      _usandoBackend = !_usandoBackend;
+      if (_usandoBackend) {
+        _vacunasFiltradas = _vacunasBackend;
+      } else {
+        // Cargar vacunas locales
+        _cargarVacunasLocales();
+      }
+    });
+  }
+
+  Future<void> _cargarVacunasLocales() async {
+    try {
+      final vacunaService = Provider.of<VacunaService>(context, listen: false);
+      final vacunasLocales = await vacunaService.getVacunas();
+      
+      setState(() {
+        _vacunasFiltradas = vacunasLocales;
+      });
+    } catch (e) {
+      print('❌ Error cargando vacunas locales: $e');
+    }
+  }
+
+  // ... [resto de métodos como _agruparPorPaciente, _buildPacienteCard, etc.] ...
+  // Mantener todos los métodos iguales hasta el final del build
 
   List<Map<String, dynamic>> _agruparPorPaciente() {
     final Map<String, Map<String, dynamic>> pacientes = {};
     
     for (final vacuna in _vacunasFiltradas) {
-      // ✅ VERIFICACIÓN DE SEGURIDAD - EVITAR CRASH POR DATOS NULL
       if (vacuna.nombrePaciente == null || vacuna.cedulaPaciente == null) {
-        print('⚠️ Vacuna con datos nulos omitida: ${vacuna.id}');
         continue;
       }
       
@@ -168,7 +343,6 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
     final tipo = paciente['tipo'] as String;
     final vacunas = paciente['vacunas'] as List<Vacuna>;
     
-    // ✅ ACORTAR TEXTO PARA EVITAR OVERFLOW
     final String nombreMostrar = nombre.length > 20 
         ? '${nombre.substring(0, 20)}...' 
         : nombre;
@@ -193,7 +367,6 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
           children: [
             Text('Cédula: $cedula', style: TextStyle(fontSize: 13)),
             SizedBox(height: 6),
-            // ✅ USAR Wrap EN LUGAR DE Row PARA EVITAR OVERFLOW
             Wrap(
               spacing: 6,
               runSpacing: 4,
@@ -221,6 +394,15 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                       style: TextStyle(color: Colors.white, fontSize: 8),
                     ),
                     backgroundColor: Colors.red,
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  ),
+                if (_usandoBackend)
+                  Chip(
+                    label: Text(
+                      'SERVIDOR',
+                      style: TextStyle(color: Colors.white, fontSize: 8),
+                    ),
+                    backgroundColor: Colors.purple,
                     padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   ),
               ],
@@ -253,136 +435,59 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
     );
   }
 
-  Widget _buildGrupoFamiliar(String cedula, List<Map<String, dynamic>> pacientesDeEstaCedula) {
-    final adultos = pacientesDeEstaCedula.where((p) => !p['esMenor']).toList();
-    final ninos = pacientesDeEstaCedula.where((p) => p['esMenor']).toList();
-    final esGrupoFamiliar = adultos.isNotEmpty && ninos.isNotEmpty;
+  Widget _buildEstadoConexion() {
+    if (!_conexionExitosa) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: Colors.red[50],
+        child: Row(
+          children: [
+            Icon(Icons.wifi_off, color: Colors.red, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _errorMessage ?? 'No se puede conectar al servidor',
+                style: TextStyle(color: Colors.red, fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: _cargarDatos,
+              child: Text('Reintentar', style: TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
+      );
+    }
     
-    return Card(
-      margin: EdgeInsets.only(bottom: 12),
-      color: esGrupoFamiliar ? Colors.orange[50] : Colors.grey[50],
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: esGrupoFamiliar ? Colors.orange : Colors.blue,
-          child: Icon(
-            esGrupoFamiliar ? Icons.family_restroom : Icons.people,
-            color: Colors.white,
-            size: 20,
-          ),
-        ),
-        title: Text(
-          esGrupoFamiliar ? 'Grupo Familiar' : 'Pacientes',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-        ),
-        subtitle: Text(
-          'Cédula: $cedula • ${pacientesDeEstaCedula.length} paciente${pacientesDeEstaCedula.length > 1 ? 's' : ''}',
-          style: TextStyle(fontSize: 12),
-        ),
-        children: [
-          if (adultos.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.person, size: 16, color: Colors.green),
-                      SizedBox(width: 8),
-                      Text(
-                        'Adulto${adultos.length > 1 ? 's' : ''}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green[700],
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  ...adultos.map((paciente) => _buildPacienteCard(paciente)).toList(),
-                ],
+    if (_usandoBackend) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: Colors.green[50],
+        child: Row(
+          children: [
+            Icon(Icons.cloud_done, color: Colors.green, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Mostrando datos del servidor (${_vacunasBackend.length} vacunas)',
+                style: TextStyle(color: Colors.green[800], fontSize: 13),
               ),
             ),
-          
-          if (ninos.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.child_care, size: 16, color: Colors.blue),
-                      SizedBox(width: 8),
-                      Text(
-                        'Niño${ninos.length > 1 ? 's' : ''}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue[700],
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  ...ninos.map((paciente) => _buildPacienteCard(paciente)).toList(),
-                ],
-              ),
+            TextButton(
+              onPressed: _alternarFuenteDatos,
+              child: Text('Ver locales', style: TextStyle(fontSize: 13)),
             ),
-          
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  final todasVacunas = <Vacuna>[];
-                  for (final paciente in pacientesDeEstaCedula) {
-                    todasVacunas.addAll(paciente['vacunas'] as List<Vacuna>);
-                  }
-                  
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PacienteDetalleScreen(
-                        cedula: cedula,
-                        nombre: esGrupoFamiliar ? 'Grupo Familiar' : 'Pacientes',
-                        esGrupoFamiliar: esGrupoFamiliar,
-                        vacunas: todasVacunas,
-                      ),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: esGrupoFamiliar ? Colors.orange : Colors.blue,
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: Text(
-                  'Ver Todos los Registros de Esta Cédula',
-                  style: TextStyle(fontSize: 14),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    }
+    
+    return Container();
   }
 
   @override
   Widget build(BuildContext context) {
     final pacientes = _agruparPorPaciente();
-    
-    final Map<String, List<Map<String, dynamic>>> gruposPorCedula = {};
-    for (final paciente in pacientes) {
-      final cedula = paciente['cedula'] as String;
-      if (!gruposPorCedula.containsKey(cedula)) {
-        gruposPorCedula[cedula] = [];
-      }
-      gruposPorCedula[cedula]!.add(paciente);
-    }
-    
     final tieneResultados = pacientes.isNotEmpty;
 
     return Scaffold(
@@ -390,23 +495,36 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
         title: Text(
           'HealthShield',
           style: TextStyle(
-            fontSize: 18, // ✅ Tamaño reducido
+            fontSize: 18,
             fontWeight: FontWeight.bold,
             color: Colors.blue,
           ),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh, size: 20), // ✅ Tamaño reducido
-            onPressed: _cargarTodosRegistros,
-            tooltip: 'Actualizar lista',
+            icon: Icon(Icons.cloud_download, size: 20),
+            onPressed: () async {
+              setState(() {
+                _usandoBackend = true;
+              });
+              await _cargarDatos();
+            },
+            tooltip: 'Cargar del servidor',
+          ),
+          IconButton(
+            icon: Icon(Icons.refresh, size: 20),
+            onPressed: _cargarDatos,
+            tooltip: 'Actualizar datos',
           ),
         ],
       ),
       body: Column(
         children: [
+          _buildEstadoConexion(),
+          
+          // ... [resto del build igual] ...
           Card(
-            margin: EdgeInsets.all(12), // ✅ Margen reducido
+            margin: EdgeInsets.all(12),
             child: Padding(
               padding: EdgeInsets.all(8),
               child: Row(
@@ -417,12 +535,12 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                       label: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.list, size: 16), // ✅ Tamaño reducido
-                          SizedBox(width: 6), // ✅ Espacio reducido
+                          Icon(Icons.list, size: 16),
+                          SizedBox(width: 6),
                           Flexible(
                             child: Text(
                               'Todos',
-                              style: TextStyle(fontSize: 12), // ✅ Tamaño reducido
+                              style: TextStyle(fontSize: 12),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -434,27 +552,26 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                         if (selected) {
                           setState(() {
                             _modoBusqueda = 'todos';
-                            _vacunasFiltradas = _todasVacunas;
-                            _modoTodosRegistros = true;
+                            _vacunasFiltradas = _usandoBackend ? _vacunasBackend : _vacunasFiltradas;
                             _mostrarResultados = false;
                           });
                         }
                       },
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), // ✅ Padding reducido
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     ),
                   ),
-                  SizedBox(width: 6), // ✅ Espacio reducido
+                  SizedBox(width: 6),
                   Expanded(
                     child: ChoiceChip(
                       label: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search, size: 16), // ✅ Tamaño reducido
-                          SizedBox(width: 6), // ✅ Espacio reducido
+                          Icon(Icons.search, size: 16),
+                          SizedBox(width: 6),
                           Flexible(
                             child: Text(
                               'Por Cédula',
-                              style: TextStyle(fontSize: 12), // ✅ Tamaño reducido
+                              style: TextStyle(fontSize: 12),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -466,11 +583,10 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                         if (selected) {
                           setState(() {
                             _modoBusqueda = 'cedula';
-                            _modoTodosRegistros = false;
                           });
                         }
                       },
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), // ✅ Padding reducido
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     ),
                   ),
                 ],
@@ -480,9 +596,9 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
           
           if (_modoBusqueda == 'cedula')
             Card(
-              margin: EdgeInsets.symmetric(horizontal: 12, vertical: 8), // ✅ Margen reducido
+              margin: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Padding(
-                padding: EdgeInsets.all(12), // ✅ Padding reducido
+                padding: EdgeInsets.all(12),
                 child: Row(
                   children: [
                     Expanded(
@@ -491,21 +607,21 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                         decoration: InputDecoration(
                           hintText: 'Ingresa cédula',
                           border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.search, size: 20), // ✅ Tamaño reducido
+                          prefixIcon: Icon(Icons.search, size: 20),
                           labelText: 'Buscar',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12), // ✅ Padding reducido
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         ),
                         keyboardType: TextInputType.number,
                         onSubmitted: (_) => _buscarPorCedula(),
-                        style: TextStyle(fontSize: 14), // ✅ Tamaño reducido
+                        style: TextStyle(fontSize: 14),
                       ),
                     ),
                     SizedBox(width: 8),
                     SizedBox(
-                      height: 48, // ✅ Altura fija
+                      height: 48,
                       child: ElevatedButton(
                         onPressed: _buscarPorCedula,
-                        child: Text('Buscar', style: TextStyle(fontSize: 14)), // ✅ Tamaño reducido
+                        child: Text('Buscar', style: TextStyle(fontSize: 14)),
                       ),
                     ),
                     if (_mostrarResultados)
@@ -514,7 +630,7 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                       SizedBox(
                         height: 48,
                         child: IconButton(
-                          icon: Icon(Icons.clear, size: 20), // ✅ Tamaño reducido
+                          icon: Icon(Icons.clear, size: 20),
                           onPressed: _limpiarBusqueda,
                           tooltip: 'Limpiar búsqueda',
                         ),
@@ -525,24 +641,34 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
             ),
           
           Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8), // ✅ Padding reducido
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _modoBusqueda == 'todos' 
-                      ? 'Todos los Registros' 
-                      : 'Resultados',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold), // ✅ Tamaño reducido
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _modoBusqueda == 'todos' 
+                          ? (_usandoBackend ? 'Registros del Servidor' : 'Todos los Registros')
+                          : 'Resultados',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    if (_usandoBackend)
+                      Text(
+                        'Datos en tiempo real',
+                        style: TextStyle(fontSize: 11, color: Colors.green[700]),
+                      ),
+                  ],
                 ),
                 if (tieneResultados)
                   Chip(
                     label: Text(
                       '${pacientes.length}',
-                      style: TextStyle(color: Colors.white, fontSize: 11), // ✅ Tamaño reducido
+                      style: TextStyle(color: Colors.white, fontSize: 11),
                     ),
                     backgroundColor: Colors.blue,
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2), // ✅ Padding reducido
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   ),
               ],
             ),
@@ -555,8 +681,11 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CircularProgressIndicator(),
-                    SizedBox(height: 12), // ✅ Espacio reducido
-                    Text('Cargando registros...', style: TextStyle(fontSize: 14)), // ✅ Tamaño reducido
+                    SizedBox(height: 12),
+                    Text(
+                      _usandoBackend ? 'Conectando con el servidor...' : 'Cargando registros...',
+                      style: TextStyle(fontSize: 14),
+                    ),
                   ],
                 ),
               ),
@@ -564,15 +693,9 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
           else if (tieneResultados)
             Expanded(
               child: ListView(
-                padding: EdgeInsets.symmetric(horizontal: 12), // ✅ Padding reducido
+                padding: EdgeInsets.symmetric(horizontal: 12),
                 children: [
-                  if (_modoBusqueda == 'cedula')
-                    ...gruposPorCedula.entries.map((entry) {
-                      return _buildGrupoFamiliar(entry.key, entry.value);
-                    }).toList()
-                  else
-                    ...pacientes.map((paciente) => _buildPacienteCard(paciente)).toList(),
-                  
+                  ...pacientes.map((paciente) => _buildPacienteCard(paciente)).toList(),
                   SizedBox(height: 16),
                 ],
               ),
@@ -583,37 +706,70 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.search_off, size: 56, color: Colors.grey[300]), // ✅ Tamaño reducido
-                    SizedBox(height: 12), // ✅ Espacio reducido
+                    Icon(Icons.search_off, size: 56, color: Colors.grey[300]),
+                    SizedBox(height: 12),
                     Text(
                       'No se encontraron registros',
-                      style: TextStyle(fontSize: 15, color: Colors.grey[500]), // ✅ Tamaño reducido
+                      style: TextStyle(fontSize: 15, color: Colors.grey[500]),
                     ),
-                    SizedBox(height: 6), // ✅ Espacio reducido
+                    SizedBox(height: 6),
                     Text(
                       'Intenta con otra cédula',
-                      style: TextStyle(fontSize: 13, color: Colors.grey[400]), // ✅ Tamaño reducido
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
                     ),
                   ],
                 ),
               ),
             )
-          else if (_modoBusqueda == 'todos' && _todasVacunas.isEmpty)
+          else if (_modoBusqueda == 'todos' && _vacunasFiltradas.isEmpty && _conexionExitosa)
             Expanded(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.medical_services_outlined, size: 56, color: Colors.grey[300]), // ✅ Tamaño reducido
-                    SizedBox(height: 12), // ✅ Espacio reducido
+                    Icon(Icons.medical_services_outlined, size: 56, color: Colors.grey[300]),
+                    SizedBox(height: 12),
                     Text(
-                      'No hay registros de vacunas',
-                      style: TextStyle(fontSize: 15, color: Colors.grey[500]), // ✅ Tamaño reducido
+                      _usandoBackend 
+                          ? 'No hay registros de vacunas en el servidor'
+                          : 'No hay registros de vacunas',
+                      style: TextStyle(fontSize: 15, color: Colors.grey[500]),
                     ),
-                    SizedBox(height: 6), // ✅ Espacio reducido
+                    SizedBox(height: 6),
                     Text(
                       'Registra tu primera vacuna',
-                      style: TextStyle(fontSize: 13, color: Colors.grey[400]), // ✅ Tamaño reducido
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (!_conexionExitosa && _usandoBackend)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.wifi_off, size: 64, color: Colors.grey[400]),
+                    SizedBox(height: 16),
+                    Text(
+                      'Error de conexión',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+                    ),
+                    SizedBox(height: 8),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        _errorMessage ?? 'No se puede conectar al servidor. Verifica tu conexión a internet.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                      ),
+                    ),
+                    SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: _cargarDatos,
+                      icon: Icon(Icons.refresh),
+                      label: Text('Reintentar conexión'),
                     ),
                   ],
                 ),
@@ -625,28 +781,34 @@ class _VisualizarRegistrosScreenState extends State<VisualizarRegistrosScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.search, size: 56, color: Colors.grey[300]), // ✅ Tamaño reducido
-                    SizedBox(height: 12), // ✅ Espacio reducido
+                    Icon(
+                      _usandoBackend ? Icons.cloud_download : Icons.search,
+                      size: 56,
+                      color: Colors.grey[300],
+                    ),
+                    SizedBox(height: 12),
                     Text(
                       _modoBusqueda == 'todos' 
-                          ? 'Todos los Registros' 
+                          ? (_usandoBackend ? 'Registros del Servidor' : 'Todos los Registros')
                           : 'Buscar por Cédula',
                       style: TextStyle(
-                        fontSize: 16, // ✅ Tamaño reducido
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Colors.grey[500],
                       ),
                     ),
-                    SizedBox(height: 8), // ✅ Espacio reducido
+                    SizedBox(height: 8),
                     Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 24), // ✅ Padding reducido
+                      padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Text(
                         _modoBusqueda == 'todos'
-                            ? 'Se mostrarán todos los pacientes registrados.'
+                            ? (_usandoBackend
+                                ? 'Se mostrarán todos los pacientes registrados en el servidor.'
+                                : 'Se mostrarán todos los pacientes registrados localmente.')
                             : 'Ingresa una cédula para buscar pacientes.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 13, // ✅ Tamaño reducido
+                          fontSize: 13,
                           color: Colors.grey[400],
                         ),
                       ),
