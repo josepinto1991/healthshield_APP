@@ -574,6 +574,11 @@ class _VerificarProfesionalScreenState extends State<VerificarProfesionalScreen>
                     ),
                     SizedBox(height: 8),
                     Text(
+                      '• Mensaje de error "HTTP 500" indica problemas con el servidor SACS, no con la app',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
                       '• Este sistema consulta el registro oficial SACS del Ministerio de Salud',
                       style: TextStyle(fontSize: 12),
                     ),
